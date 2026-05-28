@@ -1,14 +1,13 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaLibSQL } from "@prisma/adapter-libsql";
-import { createClient } from "@libsql/client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-function createPrismaClient() {
-  // 线上环境：使用 Turso
+async function createPrismaClient() {
   if (process.env.TURSO_DATABASE_URL) {
+    const { createClient } = await import("@libsql/client");
+    const { PrismaLibSQL } = await import("@prisma/adapter-libsql");
     const libsql = createClient({
       url: process.env.TURSO_DATABASE_URL,
       authToken: process.env.TURSO_AUTH_TOKEN,
@@ -16,12 +15,22 @@ function createPrismaClient() {
     const adapter = new PrismaLibSQL(libsql);
     return new PrismaClient({ adapter } as never);
   }
-  // 本地开发：使用 SQLite 文件
   return new PrismaClient();
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+let prismaPromise: Promise<PrismaClient>;
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+if (globalForPrisma.prisma) {
+  prismaPromise = Promise.resolve(globalForPrisma.prisma);
+} else {
+  prismaPromise = createPrismaClient().then((client) => {
+    if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
+    return client;
+  });
+}
 
+export { prismaPromise as prismaAsync };
+
+// 同步导出（本地开发用）
+export const prisma = globalForPrisma.prisma ?? new PrismaClient();
 export default prisma;

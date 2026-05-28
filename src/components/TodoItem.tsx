@@ -13,7 +13,7 @@ interface TodoItemProps {
   onToggle: (id: string, completed: boolean) => void;
   onUpdate: (id: string, data: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
-  dragHandleProps?: Record<string, unknown>;
+  dragHandleProps?: object;
 }
 
 const ZONE_LABELS: Record<number, { text: string; cls: string }> = {
