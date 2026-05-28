@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  DATABASE_URL = "libsql://9omantic-9omantic.aws-ap-northeast-1.turso.io"
+  TURSO_DATABASE_URL = "libsql://9omantic-9omantic.aws-ap-northeast-1.turso.io"
+  TURSO_AUTH_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJleHAiOjE3ODUxMjQxNTEsImlhdCI6MTc3OTk0MDE1MSwiaWQiOiIwMTllNmNiMi0zMTAxLTdmMDMtYjM1Ny1mNmMyODRhYjY2M2UiLCJyaWQiOiI3YThlZDIzNy01NzM4LTRhMDMtYmY5NS0zZTNjMmEzY2MyZDQifQ.arHSzJxPfWIZsj-qVOFFiUDGs6kPAfytSweUXaKGWw7VmuScGEU2o0XXLft1ZmPFs2xJbebo4zAFKfiH3fU5Dw"

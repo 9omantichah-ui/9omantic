@@ -14,6 +14,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@libsql/client": "^0.17.3",
+    "@netlify/plugin-nextjs": "^5.15.11",
     "@prisma/adapter-libsql": "^7.8.0",
     "@prisma/client": "^5.14.0",
     "next": "^14.2.0",
