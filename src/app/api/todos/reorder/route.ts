@@ -1,29 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import makePrisma from "@/lib/prisma";
+import db from "@/lib/db";
 
-// PUT - 批量更新待办顺序
 export async function PUT(request: NextRequest) {
   try {
-    const prisma = await makePrisma();
-    const body = await request.json();
-    const { items } = body as {
-      items: { id: string; zone: number; order: number }[];
-    };
-
-    const updates = items.map((item) =>
-      prisma.todo.update({
-        where: { id: item.id },
-        data: { zone: item.zone, order: item.order },
-      })
-    );
-
-    await prisma.$transaction(updates);
-
+    const { items } = await request.json() as { items: { id: string; zone: number; order: number }[] };
+    const now = new Date().toISOString();
+    const stmts = items.map(item => ({
+      sql: 'UPDATE Todo SET zone = ?, "order" = ?, updatedAt = ? WHERE id = ?',
+      args: [item.zone, item.order, now, item.id] as unknown[],
+    }));
+    await db.batch(stmts as never[]);
     return NextResponse.json({ message: "排序更新成功" });
   } catch (error) {
-    return NextResponse.json(
-      { error: "更新排序失败" },
-      { status: 500 }
-    );
+    console.error("reorder error:", error);
+    return NextResponse.json({ error: "更新排序失败" }, { status: 500 });
   }
 }
