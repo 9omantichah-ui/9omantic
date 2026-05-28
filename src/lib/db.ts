@@ -23,6 +23,16 @@ export async function queryAll(sql: string, args: unknown[] = []) {
   }
 }
 
+export async function queryOne(sql: string, args: unknown[] = []) {
+  try {
+    const result = await getClient().execute({ sql, args: args as never[] });
+    return result.rows.length > 0 ? result.rows[0] : null;
+  } catch (error) {
+    console.error("[db] queryOne error:", sql, error);
+    throw error;
+  }
+}
+
 export async function execute(sql: string, args: unknown[] = []) {
   try {
     return await getClient().execute({ sql, args: args as never[] });
