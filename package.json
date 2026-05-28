@@ -1,0 +1,35 @@
+{
+  "name": "todolist",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
+    "@libsql/client": "^0.17.3",
+    "@prisma/adapter-libsql": "^7.8.0",
+    "@prisma/client": "^5.14.0",
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.0",
+    "postcss": "^8.4.38",
+    "prisma": "^5.14.0",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.4.0"
+  }
+}
