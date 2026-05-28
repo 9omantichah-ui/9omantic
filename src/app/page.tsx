@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Todo, Project } from "@/lib/types";
 import TodoItem from "@/components/TodoItem";
+import AuthForm from "@/components/AuthForm";
 
 const PRIORITY_ZONES = [
   { id: 1, name: "第一顺位", accent: "#ef4444", empty: "拖拽任务到此区域" },
@@ -26,6 +27,8 @@ function ProgressBar({ total, done, color }: { total: number; done: number; colo
 }
 
 export default function Home() {
+  const [user, setUser] = useState<{ id: string; nickname: string } | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,22 +38,30 @@ export default function Home() {
   const [createProjectId, setCreateProjectId] = useState("");
   const [createTitle, setCreateTitle] = useState("");
   const [createDesc, setCreateDesc] = useState("");
-  const [showAll] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [inlineAddId, setInlineAddId] = useState<string | null>(null);
   const [inlineTitle, setInlineTitle] = useState("");
   const [inlineDesc, setInlineDesc] = useState("");
 
+  // 检查登录状态
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(data => {
+      if (data.user) setUser(data.user);
+      setAuthChecked(true);
+    }).catch(() => setAuthChecked(true));
+  }, []);
+
   const fetchTodos = useCallback(async () => {
-    try { setTodos(await (await fetch(`/api/todos?showAll=${showAll}`)).json()); }
+    if (!user) return;
+    try { setTodos(await (await fetch("/api/todos")).json()); }
     catch (e) { console.error(e); } finally { setLoading(false); }
-  }, [showAll]);
+  }, [user]);
   const fetchProjects = async () => {
-    try { setProjects(await (await fetch("/api/projects")).json()); } catch (e) { console.error(e); }
+    try { const data = await (await fetch("/api/projects")).json(); if (Array.isArray(data)) setProjects(data); } catch (e) { console.error(e); }
   };
-  useEffect(() => { fetchProjects(); }, []);
-  useEffect(() => { fetchTodos(); }, [fetchTodos]);
+  useEffect(() => { if (user) fetchProjects(); }, [user]);
+  useEffect(() => { if (user) fetchTodos(); }, [fetchTodos, user]);
 
   const saveTitle = () => {
     const v = titleDraft.trim() || "我的待办任务";
@@ -118,6 +129,8 @@ export default function Home() {
     return Object.values(g);
   };
 
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center"><div className="text-gray-400">加载中...</div></div>;
+  if (!user) return <AuthForm onSuccess={(u) => { setUser(u); setLoading(true); }} />;
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-gray-400">加载中...</div></div>;
 
   const poolTodos = todos.filter(t => t.zone === 0);
@@ -148,6 +161,11 @@ export default function Home() {
             </h1>
           )}
           <p className="text-sm text-gray-400 mt-1">{todos.filter(t => !t.completed).length} 项进行中 · {todos.filter(t => t.completed).length} 项已完成</p>
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <span className="text-xs text-gray-400">Hi, {user.nickname}</span>
+            <button onClick={async () => { await fetch("/api/auth/me", { method: "DELETE" }); setUser(null); setTodos([]); setProjects([]); }}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors">退出</button>
+          </div>
         </div>
 
         {/* ══ 快速记 ══ */}
