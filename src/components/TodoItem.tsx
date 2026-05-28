@@ -18,20 +18,20 @@ interface TodoItemProps {
 
 const ZONE_LABELS: Record<number, { text: string; cls: string }> = {
   0: { text: "待分配", cls: "bg-gray-100 text-gray-500" },
-  1: { text: "P1", cls: "bg-red-50 text-red-600 ring-1 ring-red-200" },
-  2: { text: "P2", cls: "bg-orange-50 text-orange-600 ring-1 ring-orange-200" },
-  3: { text: "P3", cls: "bg-blue-50 text-blue-600 ring-1 ring-blue-200" },
+  1: { text: "优先", cls: "bg-red-50 text-red-600 ring-1 ring-red-200" },
+  2: { text: "稍后", cls: "bg-orange-50 text-orange-600 ring-1 ring-orange-200" },
+  3: { text: "晚点", cls: "bg-blue-50 text-blue-600 ring-1 ring-blue-200" },
 };
 
 export default function TodoItem({
-  todo, projects, compact, showZoneBadge, hideProject, onToggle, onUpdate, onDelete, dragHandleProps,
+  todo, projects, compact, showZoneBadge, hideProject, onToggle, onUpdate, onDelete,
 }: TodoItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
 
   if (isEditing) {
     return (
-      <div className="p-3 border border-blue-200 rounded-xl bg-blue-50/40 shadow-sm">
+      <div className="p-3 border border-blue-200 rounded-xl bg-blue-50/40 shadow-sm" onMouseDown={e => e.stopPropagation()}>
         <TodoForm
           todo={todo}
           projects={projects}
@@ -46,24 +46,23 @@ export default function TodoItem({
   const zoneInfo = ZONE_LABELS[todo.zone] || ZONE_LABELS[0];
 
   return (
-    <div className={`group flex items-start gap-2 ${compact ? "px-2.5 py-2" : "px-3 py-2.5"} rounded-lg border transition-all ${
+    <div className={`group flex items-start gap-2 ${compact ? "px-2.5 py-2" : "px-3 py-2.5"} rounded-lg border transition-all select-none ${
       isDone
         ? "bg-gray-50/80 border-gray-100 opacity-55"
         : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm"
     }`}>
-      {/* 拖拽手柄 */}
-      {dragHandleProps && (
-        <div {...dragHandleProps} className="mt-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 flex-shrink-0">
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
-            <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
-            <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
-          </svg>
-        </div>
-      )}
+      {/* 拖拽提示图标 */}
+      <div className="mt-1 text-gray-200 group-hover:text-gray-300 flex-shrink-0 transition-colors">
+        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+          <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+          <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+        </svg>
+      </div>
 
       {/* 完成按钮 */}
       <button
+        onMouseDown={e => e.stopPropagation()}
         onClick={() => onToggle(todo.id, !isDone)}
         className={`mt-0.5 w-[18px] h-[18px] rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
           isDone ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-blue-400 hover:bg-blue-50"
@@ -78,12 +77,11 @@ export default function TodoItem({
 
       {/* 内容区 */}
       <div className="flex-1 min-w-0">
-        {/* 标题行 */}
         <p className={`${compact ? "text-[13px]" : "text-sm"} font-medium leading-snug ${
           isDone ? "line-through text-gray-400" : "text-gray-800"
         }`}>{todo.title}</p>
 
-        {/* 标签行：项目 + 顺位 */}
+        {/* 标签行 */}
         <div className="flex items-center gap-1 mt-1 flex-wrap">
           {!hideProject && todo.project && (
             <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[10px] font-medium text-white" style={{ backgroundColor: todo.project.color }}>
@@ -104,13 +102,11 @@ export default function TodoItem({
             {descExpanded ? (
               <div className={`text-xs leading-relaxed whitespace-pre-wrap ${isDone ? "text-gray-400" : "text-gray-500"}`}>
                 {todo.description}
-                <button onClick={() => setDescExpanded(false)} className="ml-1.5 text-blue-500 hover:text-blue-600 font-medium">收起</button>
+                <button onMouseDown={e => e.stopPropagation()} onClick={() => setDescExpanded(false)} className="ml-1.5 text-blue-500 hover:text-blue-600 font-medium">收起</button>
               </div>
             ) : (
-              <button
-                onClick={() => setDescExpanded(true)}
-                className="text-[11px] text-gray-400 hover:text-gray-500 flex items-center gap-1 transition-colors"
-              >
+              <button onMouseDown={e => e.stopPropagation()} onClick={() => setDescExpanded(true)}
+                className="text-[11px] text-gray-400 hover:text-gray-500 flex items-center gap-1 transition-colors">
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
                 </svg>
@@ -124,6 +120,7 @@ export default function TodoItem({
       {/* 操作按钮 */}
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
         <button
+          onMouseDown={e => e.stopPropagation()}
           onClick={() => setIsEditing(true)}
           className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
           title="编辑"
@@ -133,6 +130,7 @@ export default function TodoItem({
           </svg>
         </button>
         <button
+          onMouseDown={e => e.stopPropagation()}
           onClick={() => onDelete(todo.id)}
           className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
           title="删除"
