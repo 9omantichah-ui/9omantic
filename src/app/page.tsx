@@ -8,22 +8,11 @@ import AuthForm from "@/components/AuthForm";
 import Image from "next/image";
 
 const ZONES = [
-  { id: 1, name: "优先做", accent: "#ef4444", desc: "立刻行动", empty: "把最紧急的拖到这里" },
-  { id: 2, name: "稍后做", accent: "#f97316", desc: "排队中", empty: "不急但重要的放这里" },
-  { id: 3, name: "晚点做", accent: "#3b82f6", desc: "有空再说", empty: "迟早会做的事" },
+  { id: 1, name: "优先做", accent: "#ef4444", empty: "把最紧急的待办拖到这里" },
+  { id: 2, name: "稍后做", accent: "#f97316", empty: "不急但重要的待办放这里" },
+  { id: 3, name: "晚点做", accent: "#3b82f6", empty: "有空再处理的待办放这里" },
 ];
-const ZONE_NAME: Record<number, string> = { 0: "待办池", 1: "优先做", 2: "稍后做", 3: "晚点做" };
-const POOL_HINTS = [
-  { min: 15, msg: "铅笔盒要合不上了，再不整理就溢出来了。" },
-  { min: 10, msg: "纸条快塞满了，建议先拖几张到优先做。" },
-  { min: 6, msg: "铅笔盒有点满了，挑几张出来安排一下？" },
-];
-
-function noteRotation(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
-  return ((h % 5) - 2) * 0.8;
-}
+const ZONE_NAME: Record<number, string> = { 0: "未整理", 1: "优先做", 2: "稍后做", 3: "晚点做" };
 
 function ProgressBar({ total, done, color }: { total: number; done: number; color: string }) {
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
@@ -38,11 +27,6 @@ function ProgressBar({ total, done, color }: { total: number; done: number; colo
   );
 }
 
-function getPoolHint(count: number): string | null {
-  for (const h of POOL_HINTS) { if (count >= h.min) return h.msg; }
-  return null;
-}
-
 export default function Home() {
   const [user, setUser] = useState<{ id: string; nickname: string } | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -54,11 +38,8 @@ export default function Home() {
   const [createDesc, setCreateDesc] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectForm, setShowProjectForm] = useState(false);
-  const [newTaskId, setNewTaskId] = useState<string | null>(null);
-  const [showDescInput, setShowDescInput] = useState(false);
-  const newTaskTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const titleInputRef = useRef<HTMLTextAreaElement>(null);
-  const draggingRef = useRef(false);
+  const [showDesc, setShowDesc] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(data => {
@@ -78,23 +59,15 @@ export default function Home() {
   useEffect(() => { if (user) fetchProjects(); }, [user]);
   useEffect(() => { if (user) fetchTodos(); }, [fetchTodos, user]);
 
-  const createTodo = async (title: string, desc: string, projectId: string, zone = 0) => {
-    try {
-      const r = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, description: desc || undefined, projectId: projectId || undefined, zone }) });
-      if (r.ok) {
-        const n = await r.json();
-        setNewTaskId(n.id);
-        if (newTaskTimer.current) clearTimeout(newTaskTimer.current);
-        newTaskTimer.current = setTimeout(() => setNewTaskId(null), 600);
-        setTodos(p => [...p, n]);
-      }
-    } catch (e) { console.error(e); }
-  };
   const handleCreate = async () => {
     if (!createTitle.trim()) return;
-    await createTodo(createTitle.trim(), createDesc.trim(), createProjectId);
-    setCreateTitle(""); setCreateDesc(""); setShowDescInput(false);
+    try {
+      const r = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: createTitle.trim(), description: createDesc.trim() || undefined, projectId: createProjectId || undefined, zone: 0 }) });
+      if (r.ok) { const n = await r.json(); setTodos(p => [...p, n]); }
+    } catch (e) { console.error(e); }
+    setCreateTitle(""); setCreateDesc(""); setShowDesc(false);
+    inputRef.current?.focus();
   };
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
@@ -120,7 +93,6 @@ export default function Home() {
     catch (e) { console.error(e); }
   };
   const handleDragEnd = async (result: DropResult) => {
-    draggingRef.current = false;
     if (!result.destination) return;
     const sZ = parseInt(result.source.droppableId), dZ = parseInt(result.destination.droppableId);
     const sI = result.source.index, dI = result.destination.index;
@@ -146,24 +118,23 @@ export default function Home() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-gray-400 text-sm">加载中...</span></div>;
 
   const poolTodos = todos.filter(t => t.zone === 0);
-  const poolHint = getPoolHint(poolTodos.length);
 
   return (
-    <DragDropContext onDragStart={() => { draggingRef.current = true; }} onDragEnd={handleDragEnd}>
-    <main className="min-h-screen py-5 px-4 lg:px-8" style={{ background: "linear-gradient(180deg, #f0f2f5 0%, #f8f9fb 100%)" }}>
+    <DragDropContext onDragEnd={handleDragEnd}>
+    <main className="min-h-screen py-6 px-4 lg:px-8 bg-[#f5f6f8]">
       <div className="max-w-[1100px] mx-auto">
 
-        {/* ═══ 顶部品牌区 ═══ */}
-        <header className="mb-6 flex items-center justify-between">
+        {/* ── 品牌区 ── */}
+        <header className="mb-7 flex items-center justify-between">
           <div className="flex items-center gap-3.5">
             <Image src="/logo.svg" alt="ActionFlow" width={44} height={44} className="flex-shrink-0" />
             <div>
               <div className="flex items-baseline gap-2">
                 <h1 className="text-xl font-bold text-gray-900 tracking-tight">ActionFlow</h1>
-                <span className="text-sm font-medium text-gray-500">行动秩序</span>
+                <span className="text-sm font-medium text-gray-400">行动秩序</span>
               </div>
-              <p className="text-sm font-semibold text-gray-700 mt-0.5">随手记录，灵活规划，高效执行</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">随手记下任务，再拖拽安排执行节奏</p>
+              <p className="text-[13px] font-semibold text-gray-600 mt-0.5">随手记录，灵活规划，高效执行</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">把待办记下来，再安排它怎么做</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -175,115 +146,88 @@ export default function Home() {
             </div>
           </div>
         </header>
-        {/* ═══ 快速记录（草稿纸） ═══ */}
-        <section className="mb-3">
-          <h2 className="text-xs font-semibold text-gray-500 mb-2 ml-1">快速记录</h2>
-          <div className="draft-paper px-5 pt-4 pb-3 cursor-text" onClick={() => titleInputRef.current?.focus()}>
-            <textarea
-              ref={titleInputRef}
-              placeholder="在这里随手写下一个任务..."
-              value={createTitle}
-              onChange={e => setCreateTitle(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleCreate(); } }}
-              rows={2}
-              className="draft-input w-full text-sm text-gray-800"
-              style={{ lineHeight: "28px" }}
-            />
-            {showDescInput && (
-           <textarea
-                placeholder="补充备注..."
-                value={createDesc}
-                onChange={e => setCreateDesc(e.target.value)}
-                rows={1}
-                className="draft-input w-full text-xs text-gray-500 mt-0"
-                style={{ lineHeight: "28px" }}
-              />
-            )}
-            <div className="flex items-center justify-between mt-1 pt-2 border-t border-gray-200/40">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <button onClick={(e) => { e.stopPropagation(); setCreateProjectId(""); }}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${createProjectId === "" ? "bg-gray-700 text-white" : "bg-gray-200/60 text-gray-500 hover:bg-gray-200"}`}>未分类</button>
-                {projects.map(p => (
-                  <button key={p.id} onClick={(e) => { e.stopPropagation(); setCreateProjectId(p.id); }}
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium text-white transition-all ${createProjectId === p.id ? "ring-2 ring-gray-400 shadow-sm" : "opacity-50 hover:opacity-80"}`}
-                    style={{ backgroundColor: p.color }}>{p.name}</button>
-                ))}
-                {showProjectForm ? (
-                  <span className="inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                    <input type="text" placeholder="项目名" value={newProjectName} onChange={e => setNewProjectName(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && handleCreateProject()}
-                      className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] text-gray-700 w-16 focus:outline-none focus:ring-1 focus:ring-blue-400" autoFocus />
-                    <button onClick={handleCreateProject} className="text-[10px] text-blue-600 font-medium">确定</button>
-                    <button onClick={() => { setShowProjectForm(false); setNewProjectName(""); }} className="text-[10px] text-gray-400">取消</button>
-                  </span>
-                ) : (
-                  <button onClick={(e) => { e.stopPropagation(); setShowProjectForm(true); }} className="px-1.5 py-0.5 rounded-full text-[10px] border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-500">+ 项目</button>
-                )}
-                <button onClick={(e) => { e.stopPropagation(); setShowDescInput(!showDescInput); }}
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] transition-all ${showDescInput ? "bg-gray-200 text-gray-600" : "text-gray-400 hover:text-gray-500"}`}>
-                  {showDescInput ? "收起备注" : "+ 备注"}
-                </button>
-              </div>
-              <button onClick={(e) => { e.stopPropagation(); handleCreate(); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${createTitle.trim() ? "bg-gray-800 text-white hover:bg-gray-700 active:scale-95" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-                disabled={!createTitle.trim()}>添加到待办池</button>
+
+        {/* ── 添加一个「待办」 ── */}
+        <section className="mb-6">
+          <h2 className="text-sm font-bold text-gray-800 mb-2">添加一个「待办」</h2>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3.5">
+            <div className="flex items-center gap-3">
+              <input ref={inputRef} type="text" placeholder="写下一个待办..." value={createTitle}
+                onChange={e => setCreateTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleCreate(); }}
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder:text-gray-400 transition-all" />
+              <button onClick={handleCreate}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${createTitle.trim() ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.97]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                disabled={!createTitle.trim()}>添加待办</button>
             </div>
+            <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+              <button onClick={() => setCreateProjectId("")}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${createProjectId === "" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>未分类</button>
+              {projects.map(p => (
+                <button key={p.id} onClick={() => setCreateProjectId(p.id)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium text-white transition-all ${createProjectId === p.id ? "ring-2 ring-offset-1 ring-gray-300" : "opacity-55 hover:opacity-85"}`}
+                  style={{ backgroundColor: p.color }}>{p.name}</button>
+              ))}
+              {showProjectForm ? (
+                <span className="inline-flex items-center gap-1">
+                  <input type="text" placeholder="项目名" value={newProjectName} onChange={e => setNewProjectName(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleCreateProject()}
+                    className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] text-gray-700 w-16 focus:outline-none focus:ring-1 focus:ring-blue-400" autoFocus />
+                  <button onClick={handleCreateProject} className="text-[10px] text-blue-600 font-medium">确定</button>
+                  <button onClick={() => { setShowProjectForm(false); setNewProjectName(""); }} className="text-[10px] text-gray-400">取消</button>
+                </span>
+              ) : (
+                <button onClick={() => setShowProjectForm(true)} className="px-1.5 py-0.5 rounded-full text-[10px] border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-500">+ 新建项目</button>
+              )}
+              <button onClick={() => setShowDesc(!showDesc)}
+                className={`px-1.5 py-0.5 rounded-full text-[10px] transition-all ${showDesc ? "bg-gray-200 text-gray-600" : "text-gray-400 hover:text-gray-500"}`}>
+                {showDesc ? "收起备注" : "+ 备注"}
+              </button>
+            </div>
+            {showDesc && (
+              <textarea placeholder="备注（可选）" value={createDesc} onChange={e => setCreateDesc(e.target.value)} rows={2}
+                className="mt-2 w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 focus:outline-none focus:border-blue-400 resize-none placeholder:text-gray-400 transition-all" />
+            )}
           </div>
         </section>
 
-        {/* ═══ 待办池（铅笔盒） ═══ */}
+        {/* ── 未整理的「待办」 ── */}
         <section className="mb-6">
-          <div className="pencil-case overflow-hidden">
-            <div className="px-4 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-gray-600">待办池</span>
-                <span className="text-[10px] text-gray-400">{poolTodos.length} 张纸条</span>
-              </div>
-              {poolHint && (
-                <span className="text-[11px] text-amber-700 bg-amber-100/60 px-2.5 py-0.5 rounded-full animate-hint-slide">{poolHint}</span>
-              )}
-            </div>
-            <div className="mx-2 mb-2">
-              <div className="pencil-case-inner p-3 min-h-[4rem]">
-                <Droppable droppableId="0" direction="horizontal">
-                  {(provided, snapshot) => (
-                    <div ref={provided.innerRef} {...provided.droppableProps}
-                      className={`flex flex-wrap gap-2.5 min-h-[3rem] rounded-md p-1 transition-all ${snapshot.isDraggingOver ? "pencil-case-drop-highlight" : ""}`}>
-                      {poolTodos.length === 0 && !snapshot.isDraggingOver && (
-                        <div className="w-full text-center py-6 text-sm text-gray-400/70 italic">
-                          铅笔盒空空，脑子也轻轻。
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-bold text-gray-800">未整理的「待办」<span className="ml-2 text-[11px] font-normal text-gray-400">{poolTodos.length} 项</span></h2>
+            {poolTodos.length >= 6 && (
+              <span className="text-[11px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">未整理待办有点多，先挑几个安排一下。</span>
+            )}
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
+           <Droppable droppableId="0">
+              {(provided, snapshot) =>(
+                <div ref={provided.innerRef} {...provided.droppableProps}
+                  className={`space-y-1.5 min-h-[3rem] rounded-lg p-1 transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
+                  {poolTodos.length === 0 && !snapshot.isDraggingOver && (
+                    <div className="text-center py-5 text-sm text-gray-300">暂无未整理待办</div>
+                  )}
+                  {poolTodos.map((todo, i) => (
+                    <Draggable key={todo.id} draggableId={todo.id} index={i}>
+                      {(prov, snap) => (
+                        <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
+                          className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""}`}>
+                          <TodoItem todo={todo} projects={projects} compact
+                            onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} />
                         </div>
                       )}
-                      {poolTodos.map((todo, i) => {
-                        const rot = noteRotation(todo.id);
-                        return (
-                          <Draggable key={todo.id} draggableId={todo.id} index={i}>
-                            {(prov, snap) => (
-                              <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
-                                className={`w-full sm:w-[calc(50%-6px)] lg:w-[calc(33.333%-8px)] cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : "note-card"} ${newTaskId === todo.id ? "animate-note-toss" : ""}`}
-                                style={{
-                                  ...prov.draggableProps.style,
-                                  ...(snap.isDragging ? {} : { transform: `rotate(${rot}deg) translateY(${Math.abs(rot) > 1 ? 2 : 0}px)` }),
-                                } as React.CSSProperties}>
-                                <TodoItem todo={todo} projects={projects} compact
-                                  onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} />
-                              </div>
-                            )}
-                          </Draggable>
-                        );
-                      })}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </div>
-            </div>
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
           </div>
         </section>
 
-        {/* ═══ 执行安排 ═══ */}
+        {/* ── 已安排的「待办」 ── */}
         <section className="mb-8">
-          <h2 className="text-base font-bold text-gray-800 mb-3">执行安排</h2>
+          <h2 className="text-sm font-bold text-gray-800 mb-2">已安排的「待办」</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {ZONES.map(zone => {
               const zt = todos.filter(t => t.zone === zone.id);
@@ -295,7 +239,6 @@ export default function Home() {
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: zone.accent }} />
                         <span className="text-xs font-semibold text-gray-700">{zone.name}</span>
-                        <span className="text-[10px] text-gray-400">{zone.desc}</span>
                       </div>
                       {total > 0 && <span className="text-[10px] text-gray-400 tabular-nums">{done}/{total}</span>}
                     </div>
@@ -305,9 +248,9 @@ export default function Home() {
                     <Droppable droppableId={String(zone.id)}>
                       {(provided, snapshot) => (
                         <div ref={provided.innerRef} {...provided.droppableProps}
-                          className={`space-y-1.5 min-h-[4rem] rounded-lg p-1.5 transition-all ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
+                          className={`space-y-1.5 min-h-[3.5rem] rounded-lg p-1.5 transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
                           {zt.length === 0 && !snapshot.isDraggingOver && (
-                            <div className="text-center py-6 text-xs text-gray-300">{zone.empty}</div>
+                            <div className="text-center py-5 text-xs text-gray-300">{zone.empty}</div>
                           )}
                           {zt.map((todo, i) => (
                             <Draggable key={todo.id} draggableId={todo.id} index={i}>
@@ -323,7 +266,7 @@ export default function Home() {
                           {provided.placeholder}
                         </div>
                       )}
-                    </Droppable>
+           </Droppable>
                   </div>
                 </div>
               );
@@ -331,27 +274,26 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ═══ 项目 ═══ */}
-        <section className="mb-8 opacity-75">
-          <h2 className="text-sm font-semibold text-gray-500 mb-3">项目</h2>
+        {/* ── 各项目情况概览 ── */}
+        <section className="mb-8">
+          <h2 className="text-xs font-semibold text-gray-400 mb-2.5">各项目情况概览</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {projectGroups().map(group => {
               const gt = group.todos, total = gt.length, done = gt.filter(t => t.completed).length;
               const pc = group.project?.color || "#94a3b8";
-              const groupKey = group.project?.id || "_none";
               return (
-                <div key={groupKey} className="bg-white/80 rounded-lg border border-gray-200/80 shadow-sm overflow-hidden">
+                <div key={group.project?.id || "_none"} className="bg-white/90 rounded-lg border border-gray-200/80 shadow-sm overflow-hidden">
                   <div className="px-3.5 py-2 border-b border-gray-100">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: pc }} />
                       <span className="text-xs font-semibold text-gray-700">{group.project?.name || "未分类"}</span>
-                      <span className="text-[10px] text-gray-400 ml-auto tabular-nums">{done}/{total} 完成</span>
+                      <span className="text-[10px] text-gray-400 ml-auto tabular-nums">{done}/{total}</span>
                     </div>
                     <ProgressBar total={total} done={done} color={pc} />
                   </div>
-                  <div className="px-3.5 py-2 space-y-1 max-h-[200px] overflow-y-auto">
+                  <div className="px-3.5 py-2 space-y-1 max-h-[180px] overflow-y-auto">
                     {gt.length === 0 ? (
-                      <div className="text-center py-3 text-[11px] text-gray-300">暂无任务</div>
+                      <div className="text-center py-3 text-[11px] text-gray-300">暂无待办</div>
                     ) : gt.map(todo => (
                       <div key={todo.id} className="flex items-start gap-1.5 py-0.5">
                         <button onClick={() => handleToggle(todo.id, !todo.completed)}
@@ -359,11 +301,9 @@ export default function Home() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className={`text-[11px] truncate ${todo.completed ? "text-gray-400 line-through" : "text-gray-700"}`}>{todo.title}</span>
-                            <span className="text-[9px] px-1 py-[0.5px] rounded bg-gray-100 text-gray-400 flex-shrink-0">{ZONE_NAME[todo.zone] || "待办池"}</span>
+                            <span className="text-[9px] px-1 py-[0.5px] rounded bg-gray-100 text-gray-400 flex-shrink-0">{ZONE_NAME[todo.zone]}</span>
                           </div>
-                          {todo.description && (
-                            <p className="text-[10px] text-gray-400 truncate mt-0.5">{todo.description}</p>
-                          )}
+                          {todo.description && <p className="text-[10px] text-gray-400 truncate mt-0.5">{todo.description}</p>}
                         </div>
                       </div>
                     ))}

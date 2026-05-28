@@ -17,10 +17,10 @@ interface TodoItemProps {
 }
 
 const ZONE_LABELS: Record<number, { text: string; cls: string }> = {
-  0: { text: "待办池", cls: "bg-gray-100 text-gray-500" },
-  1: { text: "优先", cls: "bg-red-50 text-red-600 ring-1 ring-red-200" },
-  2: { text: "稍后", cls: "bg-orange-50 text-orange-600 ring-1 ring-orange-200" },
-  3: { text: "晚点", cls: "bg-blue-50 text-blue-600 ring-1 ring-blue-200" },
+  0: { text: "未整理", cls: "bg-gray-100 text-gray-500" },
+  1: { text: "优先做", cls: "bg-red-50 text-red-600 ring-1 ring-red-200" },
+  2: { text: "稍后做", cls: "bg-orange-50 text-orange-600 ring-1 ring-orange-200" },
+  3: { text: "晚点做", cls: "bg-blue-50 text-blue-600 ring-1 ring-blue-200" },
 };
 
 const COMPLETE_MSGS = ["完成一件，秩序 +1", "漂亮，又少一件", "清爽了一点", "干得不错", "搞定！"];
