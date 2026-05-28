@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Todo, Project } from "@/lib/types";
 import TodoForm from "./TodoForm";
 
@@ -17,17 +17,22 @@ interface TodoItemProps {
 }
 
 const ZONE_LABELS: Record<number, { text: string; cls: string }> = {
-  0: { text: "待分配", cls: "bg-gray-100 text-gray-500" },
+  0: { text: "待办池", cls: "bg-gray-100 text-gray-500" },
   1: { text: "优先", cls: "bg-red-50 text-red-600 ring-1 ring-red-200" },
   2: { text: "稍后", cls: "bg-orange-50 text-orange-600 ring-1 ring-orange-200" },
   3: { text: "晚点", cls: "bg-blue-50 text-blue-600 ring-1 ring-blue-200" },
 };
+
+const COMPLETE_MSGS = ["完成一件，秩序 +1", "漂亮，又少一件", "清爽了一点", "干得不错", "搞定！"];
 
 export default function TodoItem({
   todo, projects, compact, showZoneBadge, hideProject, onToggle, onUpdate, onDelete,
 }: TodoItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [bouncing, setBouncing] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (isEditing) {
     return (
@@ -45,101 +50,127 @@ export default function TodoItem({
   const isDone = todo.completed;
   const zoneInfo = ZONE_LABELS[todo.zone] || ZONE_LABELS[0];
 
+  const handleToggle = () => {
+    const willComplete = !isDone;
+    setBouncing(true);
+    setTimeout(() => setBouncing(false), 400);
+
+    if (willComplete) {
+      const msg = COMPLETE_MSGS[Math.floor(Math.random() * COMPLETE_MSGS.length)];
+      setFeedback(msg);
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+      feedbackTimer.current = setTimeout(() => setFeedback(null), 1800);
+    }
+
+    onToggle(todo.id, willComplete);
+  };
+
   return (
-    <div className={`group flex items-start gap-2 ${compact ? "px-2.5 py-2" : "px-3 py-2.5"} rounded-lg border transition-all select-none ${
-      isDone
-        ? "bg-gray-50/80 border-gray-100 opacity-55"
-        : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm"
-    }`}>
-      {/* 拖拽提示图标 */}
-      <div className="mt-1 text-gray-200 group-hover:text-gray-300 flex-shrink-0 transition-colors">
-        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
-          <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
-          <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
-        </svg>
-      </div>
-
-      {/* 完成按钮 */}
-      <button
-        onMouseDown={e => e.stopPropagation()}
-        onClick={() => onToggle(todo.id, !isDone)}
-        className={`mt-0.5 w-[18px] h-[18px] rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-          isDone ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-blue-400 hover:bg-blue-50"
-        }`}
-      >
-        {isDone && (
-          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+    <div className="relative">
+      <div className={`group flex items-start gap-2 ${compact ? "px-2.5 py-2" : "px-3 py-2.5"} rounded-lg border transition-all select-none ${
+        isDone
+          ? "bg-gray-50/80 border-gray-100 opacity-55"
+          : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm"
+      }`}>
+        {/* 拖拽提示图标 */}
+        <div className="mt-1 text-gray-200 group-hover:text-gray-300 flex-shrink-0 transition-colors pointer-events-none">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+            <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+            <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
           </svg>
-        )}
-      </button>
+        </div>
 
-      {/* 内容区 */}
-      <div className="flex-1 min-w-0">
-        <p className={`${compact ? "text-[13px]" : "text-sm"} font-medium leading-snug ${
-          isDone ? "line-through text-gray-400" : "text-gray-800"
-        }`}>{todo.title}</p>
+        {/* 完成按钮 */}
+        <button
+          onMouseDown={e => e.stopPropagation()}
+          onClick={handleToggle}
+          className={`mt-0.5 w-[18px] h-[18px] rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${bouncing ? "animate-check-bounce" : ""} ${
+            isDone ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+          }`}
+        >
+          {isDone && (
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </button>
 
-        {/* 标签行 */}
-        <div className="flex items-center gap-1 mt-1 flex-wrap">
-          {!hideProject && todo.project && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[10px] font-medium text-white" style={{ backgroundColor: todo.project.color }}>
-              {todo.project.name}
-            </span>
-          )}
-          {!hideProject && !todo.project && !compact && (
-            <span className="px-1.5 py-[1px] rounded text-[10px] font-medium bg-gray-100 text-gray-400">未分类</span>
-          )}
-          {showZoneBadge && (
-            <span className={`px-1.5 py-[1px] rounded text-[10px] font-semibold ${zoneInfo.cls}`}>{zoneInfo.text}</span>
+        {/* 内容区 */}
+        <div className="flex-1 min-w-0">
+          <p className={`${compact ? "text-[13px]" : "text-sm"} font-medium leading-snug ${
+            isDone ? "line-through text-gray-400" : "text-gray-800"
+          }`}>{todo.title}</p>
+
+          {/* 标签行 */}
+          <div className="flex items-center gap-1 mt-1 flex-wrap">
+            {!hideProject && todo.project && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[10px] font-medium text-white" style={{ backgroundColor: todo.project.color }}>
+                {todo.project.name}
+              </span>
+            )}
+            {!hideProject && !todo.project && !compact && (
+              <span className="px-1.5 py-[1px] rounded text-[10px] font-medium bg-gray-100 text-gray-400">未分类</span>
+            )}
+            {showZoneBadge && (
+              <span className={`px-1.5 py-[1px] rounded text-[10px] font-semibold ${zoneInfo.cls}`}>{zoneInfo.text}</span>
+            )}
+          </div>
+
+          {/* 描述折叠 */}
+          {todo.description && (
+            <div className="mt-1">
+              {descExpanded ? (
+                <div className={`text-xs leading-relaxed whitespace-pre-wrap ${isDone ? "text-gray-400" : "text-gray-500"}`}>
+                  {todo.description}
+                  <button onMouseDown={e => e.stopPropagation()} onClick={() => setDescExpanded(false)} className="ml-1.5 text-blue-500 hover:text-blue-600 font-medium">收起</button>
+                </div>
+              ) : (
+                <button onMouseDown={e => e.stopPropagation()} onClick={() => setDescExpanded(true)}
+                  className="text-[11px] text-gray-400 hover:text-gray-500 flex items-center gap-1 transition-colors">
+                  <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                  </svg>
+                  <span className="truncate max-w-[160px]">{todo.description}</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
 
-        {/* 描述折叠 */}
-        {todo.description && (
-          <div className="mt-1">
-            {descExpanded ? (
-              <div className={`text-xs leading-relaxed whitespace-pre-wrap ${isDone ? "text-gray-400" : "text-gray-500"}`}>
-                {todo.description}
-                <button onMouseDown={e => e.stopPropagation()} onClick={() => setDescExpanded(false)} className="ml-1.5 text-blue-500 hover:text-blue-600 font-medium">收起</button>
-              </div>
-            ) : (
-              <button onMouseDown={e => e.stopPropagation()} onClick={() => setDescExpanded(true)}
-                className="text-[11px] text-gray-400 hover:text-gray-500 flex items-center gap-1 transition-colors">
-                <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-                </svg>
-                <span className="truncate max-w-[160px]">{todo.description}</span>
-              </button>
-            )}
-          </div>
-        )}
+        {/* 操作按钮 */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
+          <button
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => setIsEditing(true)}
+            className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+            title="编辑"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          <button
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => onDelete(todo.id)}
+            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+            title="删除"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* 操作按钮 */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
-        <button
-          onMouseDown={e => e.stopPropagation()}
-          onClick={() => setIsEditing(true)}
-          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-          title="编辑"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-        </button>
-        <button
-          onMouseDown={e => e.stopPropagation()}
-          onClick={() => onDelete(todo.id)}
-          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-          title="删除"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-      </div>
+      {/* 完成反馈气泡 */}
+      {feedback && (
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 animate-feedback-pop z-10">
+          <span className="whitespace-nowrap text-[11px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full shadow-sm">
+            {feedback}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

@@ -37,8 +37,9 @@ export default function AuthForm({ onSuccess }: AuthFormProps) {
     <div className="min-h-screen flex items-center justify-center bg-[#f1f5f9] px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">待办任务</h1>
-          <p className="text-gray-400 mt-2">管理你的日常任务，提高效率</p>
+          <h1 className="text-3xl font-bold text-gray-900">ActionFlow</h1>
+          <p className="text-sm font-medium text-gray-500 mt-1">行动秩序</p>
+          <p className="text-gray-400 mt-2 text-sm">随手记录，灵活规划，高效执行</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
           <div className="flex bg-gray-100 rounded-xl p-1 mb-6">

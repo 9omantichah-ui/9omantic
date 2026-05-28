@@ -1,18 +1,25 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Todo, Project } from "@/lib/types";
 import TodoItem from "@/components/TodoItem";
 import AuthForm from "@/components/AuthForm";
+import Image from "next/image";
 
 const ZONES = [
-  { id: 1, name: "优先做", accent: "#ef4444", empty: "+ 放到这里" },
-  { id: 2, name: "稍后做", accent: "#f97316", empty: "+ 放到这里" },
-  { id: 3, name: "晚点做", accent: "#3b82f6", empty: "+ 放到这里" },
+  { id: 1, name: "优先做", accent: "#ef4444", desc: "立刻行动", empty: "把最紧急的拖到这里" },
+  { id: 2, name: "稍后做", accent: "#f97316", desc: "排队中", empty: "不急但重要的放这里" },
+  { id: 3, name: "晚点做", accent: "#3b82f6", desc: "有空再说", empty: "迟早会做的事" },
 ];
 
-const ZONE_NAME: Record<number, string> = { 0: "待分配", 1: "优先做", 2: "稍后做", 3: "晚点做" };
+const ZONE_NAME: Record<number, string> = { 0: "待办池", 1: "优先做", 2: "稍后做", 3: "晚点做" };
+
+const POOL_HINTS = [
+  { min: 15, msg: "这里已经不是待办池，是任务养殖基地了。" },
+  { min: 10, msg: "待办池快成鱼塘了，建议先捞几条到优先做。" },
+  { min: 6, msg: "池子有点满了，捞几条出来安排一下？" },
+];
 
 function ProgressBar({ total, done, color }: { total: number; done: number; color: string }) {
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
@@ -27,6 +34,13 @@ function ProgressBar({ total, done, color }: { total: number; done: number; colo
   );
 }
 
+function getPoolHint(count: number): string | null {
+  for (const h of POOL_HINTS) {
+    if (count >= h.min) return h.msg;
+  }
+  return null;
+}
+
 export default function Home() {
   const [user, setUser] = useState<{ id: string; nickname: string } | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -38,6 +52,8 @@ export default function Home() {
   const [createDesc, setCreateDesc] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectForm, setShowProjectForm] = useState(false);
+  const [newTaskId, setNewTaskId] = useState<string | null>(null);
+  const newTaskTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(data => {
@@ -61,12 +77,18 @@ export default function Home() {
     try {
       const r = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, description: desc || undefined, projectId: projectId || undefined, zone }) });
-      if (r.ok) { const n = await r.json(); setTodos(p => [...p, n]); }
+      if (r.ok) {
+        const n = await r.json();
+        setNewTaskId(n.id);
+        if (newTaskTimer.current) clearTimeout(newTaskTimer.current);
+        newTaskTimer.current = setTimeout(() => setNewTaskId(null), 600);
+        setTodos(p => [...p, n]);
+      }
     } catch (e) { console.error(e); }
   };
   const handleCreate = async () => {
     if (!createTitle.trim()) return;
-    await createTodo(createTitle.trim(), createDesc.trim(), createProjectId);
+ await createTodo(createTitle.trim(), createDesc.trim(), createProjectId);
     setCreateTitle(""); setCreateDesc("");
   };
   const handleCreateProject = async () => {
@@ -118,31 +140,43 @@ export default function Home() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-gray-400 text-sm">加载中...</span></div>;
 
   const poolTodos = todos.filter(t => t.zone === 0);
+  const poolHint = getPoolHint(poolTodos.length);
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-    <main className="min-h-screen py-5 px-4 lg:px-8 bg-gray-50">
-      <div className="max-w-[1400px] mx-auto">
+    <main className="min-h-screen py-5 px-4 lg:px-8" style={{ background: "linear-gradient(180deg, #f0f2f5 0%, #f8f9fb 100%)" }}>
+      <div className="max-w-[1100px] mx-auto">
 
-        {/* ═ 顶部 ═ */}
-        <header className="mb-6 flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">待办整理</h1>
-            <p className="text-sm text-gray-400 mt-0.5">随手记录，灵活排序，高效执行</p>
-            <p className="text-xs text-gray-500 mt-1.5">{todos.filter(t => !t.completed).length} 进行中 · {todos.filter(t => t.completed).length} 已完成</p>
+        {/* ═══ 顶部品牌区 ═══ */}
+        <header className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3.5">
+            <Image src="/logo.svg" alt="ActionFlow" width={44} height={44} className="flex-shrink-0" />
+            <div>
+              <div className="flex items-baseline gap-2">
+                <h1 className="text-xl font-bold text-gray-900 tracking-tight">ActionFlow</h1>
+                <span className="text-sm font-medium text-gray-500">行动秩序</span>
+              </div>
+              <p className="text-sm font-semibold text-gray-700 mt-0.5">随手记录，灵活规划，高效执行</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">随手记下任务，再拖拽安排执行节奏</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3 pt-1">
-            <span className="text-sm text-gray-500">{user.nickname}</span>
-            <button onClick={async () => { await fetch("/api/auth/me", { method: "DELETE" }); setUser(null); setTodos([]); setProjects([]); }}
-              className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded border border-gray-200 transition-colors">退出</button>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-[11px] text-gray-400 tabular-nums">{todos.filter(t => !t.completed).length} 进行中 · {todos.filter(t => t.completed).length} 已完成</p>
+            </div>
+            <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
+              <span className="text-xs text-gray-400">{user.nickname}</span>
+              <button onClick={async () => { await fetch("/api/auth/me", { method: "DELETE" }); setUser(null); setTodos([]); setProjects([]); }}
+                className="text-[11px] text-gray-400 hover:text-red-500 px-2 py-0.5 rounded border border-gray-200 transition-colors">退出</button>
+            </div>
           </div>
         </header>
 
-        {/* ═ 快速记录 ═ */}
-        <section className="mb-6 bg-gray-900 rounded-xl px-5 py-4 shadow-lg">
+        {/* ═══ 快速记录 ═══ */}
+        <section className="mb-4 bg-gray-900 rounded-xl px-5 py-4 shadow-lg">
           <h2 className="text-sm font-semibold text-gray-200 mb-3">快速记录</h2>
           <div className="flex items-center gap-3">
-            <input type="text" placeholder="快速记录" value={createTitle}
+            <input type="text" placeholder="快速记录一个任务..." value={createTitle}
               onChange={e => setCreateTitle(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleCreate(); }}
               className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 placeholder:text-gray-500 transition-all" />
@@ -174,109 +208,112 @@ export default function Home() {
             className="mt-2 w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-xs text-gray-300 focus:outline-none focus:border-blue-500 resize-none placeholder:text-gray-600 transition-all" />
         </section>
 
-        {/* ═ 全部任务 ═ */}
-        <section className="mb-8">
-          <h2 className="text-base font-bold text-gray-800 mb-3">全部任务</h2>
-          <div className="flex flex-col lg:flex-row gap-4">
-
-            {/* 左侧：待分配 */}
-            <div className="w-full lg:w-[28%] flex-shrink-0">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full">
-                <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-600">待分配</span>
-                  <span className="text-[10px] text-gray-400">{poolTodos.length} 项</span>
-                </div>
-                <div className="p-2 flex-1 overflow-y-auto max-h-[50vh]">
-                  <Droppable droppableId="0">
-                    {(provided, snapshot) => (
-                      <div ref={provided.innerRef} {...provided.droppableProps}
-                        className={`space-y-1 min-h-[3rem] rounded-lg p-1 transition-all ${snapshot.isDraggingOver ? "bg-blue-50 ring-1 ring-blue-200" : ""}`}>
-                        {poolTodos.length === 0 && !snapshot.isDraggingOver && (
-                          <div className="text-center py-6 text-xs text-gray-300">暂无待分配</div>
-                        )}
-                        {poolTodos.map((todo, i) => (
-                          <Draggable key={todo.id} draggableId={todo.id} index={i}>
-                            {(prov, snap) => (
-                              <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
-                                className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "shadow-lg scale-[1.02] opacity-90 rotate-[0.3deg]" : ""}`}>
-                                <TodoItem todo={todo} projects={projects} compact
-                                  onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} />
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
+        {/* ═══ 待办池 ═══ */}
+        <section className="mb-6">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-600">待办池</span>
+                <span className="text-[10px] text-gray-400">{poolTodos.length} 项</span>
+              </div>
+              {poolHint && (
+                <span className="text-[11px] text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full animate-hint-slide">{poolHint}</span>
+              )}
+            </div>
+            <div className="p-3">
+              <Droppable droppableId="0" direction="horizontal">
+                {(provided, snapshot) => (
+                  <div ref={provided.innerRef} {...provided.droppableProps}
+                    className={`flex flex-wrap gap-2 min-h-[3.5rem] rounded-lg p-2 transition-all ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
+                    {poolTodos.length === 0 && !snapshot.isDraggingOver && (
+                      <div className="w-full text-center py-5 text-sm text-gray-300">
+                        待办池很清爽，脑子也可以清爽一点。
                       </div>
                     )}
-                  </Droppable>
-                </div>
-              </div>
+                    {poolTodos.map((todo, i) => (
+                      <Draggable key={todo.id} draggableId={todo.id} index={i}>
+                        {(prov, snap) => (
+                          <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
+                            className={`w-full sm:w-[calc(50%-4px)] lg:w-[calc(33.333%-6px)] cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""} ${newTaskId === todo.id ? "animate-task-slide-in" : ""}`}>
+                            <TodoItem todo={todo} projects={projects} compact
+                              onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} />
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
             </div>
-
-            {/* 右侧：已排序 */}
-            <div className="w-full lg:flex-1 min-w-0">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full">
-                <div className="px-4 py-2.5 border-b border-gray-100">
-                  <span className="text-xs font-semibold text-gray-600">已排序</span>
-                </div>
-                <div className="p-3 flex-1 overflow-y-auto max-h-[50vh] space-y-3">
-                  {ZONES.map(zone => {
-                    const zt = todos.filter(t => t.zone === zone.id);
-                    const total = zt.length, done = zt.filter(t => t.completed).length;
-                    return (
-                      <div key={zone.id}>
-                        <div className="flex items-center gap-2 mb-1.5 px-1">
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: zone.accent }} />
-                          <span className="text-[11px] font-medium text-gray-600">{zone.name}</span>
-                          {total > 0 && <div className="flex-1 max-w-[100px]"><ProgressBar total={total} done={done} color={zone.accent} /></div>}
-                        </div>
-                        <Droppable droppableId={String(zone.id)}>
-                          {(provided, snapshot) => (
-                            <div ref={provided.innerRef} {...provided.droppableProps}
-                              className={`space-y-1 min-h-[2.5rem] rounded-lg p-1.5 transition-all ${snapshot.isDraggingOver ? "bg-blue-50 ring-1 ring-blue-200" : "bg-gray-50/60"}`}>
-                              {zt.length === 0 && !snapshot.isDraggingOver && (
-                                <div className="text-center py-3 text-[11px] text-gray-300">{zone.empty}</div>
-                              )}
-                              {zt.map((todo, i) => (
-                                <Draggable key={todo.id} draggableId={todo.id} index={i}>
-                                  {(prov, snap) => (
-                                    <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
-                                      className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "shadow-lg scale-[1.02] opacity-90 rotate-[0.3deg]" : ""}`}>
-                                      <TodoItem todo={todo} projects={projects} compact
-                                        onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} />
-                                    </div>
-                                  )}
-                                </Draggable>
-                              ))}
-                              {provided.placeholder}
-                            </div>
-                          )}
-                        </Droppable>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
           </div>
         </section>
 
-        {/* ═ 项目 ═ */}
-        <section>
-          <h2 className="text-base font-bold text-gray-800 mb-3">项目</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {/* ═══ 执行安排 ═══ */}
+        <section className="mb-8">
+          <h2 className="text-base font-bold text-gray-800 mb-3">执行安排</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {ZONES.map(zone => {
+              const zt = todos.filter(t => t.zone === zone.id);
+              const total = zt.length, done = zt.filter(t => t.completed).length;
+              return (
+                <div key={zone.id} className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
+                  <div className="px-4 py-2.5 border-b border-gray-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: zone.accent }} />
+                        <span className="text-xs font-semibold text-gray-700">{zone.name}</span>
+                        <span className="text-[10px] text-gray-400">{zone.desc}</span>
+                      </div>
+                      {total > 0 && <span className="text-[10px] text-gray-400 tabular-nums">{done}/{total}</span>}
+                    </div>
+                    {total > 0 && <ProgressBar total={total} done={done} color={zone.accent} />}
+                  </div>
+                  <div className="p-2 flex-1 overflow-y-auto max-h-[45vh]">
+                    <Droppable droppableId={String(zone.id)}>
+                      {(provided, snapshot) => (
+                        <div ref={provided.innerRef} {...provided.droppableProps}
+                          className={`space-y-1.5 min-h-[4rem] rounded-lg p-1.5 transition-all ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
+                          {zt.length === 0 && !snapshot.isDraggingOver && (
+                            <div className="text-center py-6 text-xs text-gray-300">{zone.empty}</div>
+                          )}
+                          {zt.map((todo, i) => (
+                            <Draggable key={todo.id} draggableId={todo.id} index={i}>
+                              {(prov, snap) => (
+                                <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
+                                  className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""}`}>
+                                  <TodoItem todo={todo} projects={projects} compact
+                                    onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} />
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ═══ 项目 ═══ */}
+        <section className="mb-8 opacity-80">
+          <h2 className="text-sm font-semibold text-gray-500 mb-3">项目</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {projectGroups().map(group => {
               const gt = group.todos, total = gt.length, done = gt.filter(t => t.completed).length;
               const pc = group.project?.color || "#94a3b8";
               const groupKey = group.project?.id || "_none";
               return (
-                <div key={groupKey} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="px-3.5 py-2.5 border-b border-gray-100">
+                <div key={groupKey} className="bg-white/80 rounded-lg border border-gray-200/80 shadow-sm overflow-hidden">
+                  <div className="px-3.5 py-2 border-b border-gray-100">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: pc }} />
-                      <span className="text-xs font-semibold text-gray-800">{group.project?.name || "未分类"}</span>
-                      <span className="text-[10px] text-gray-400 ml-auto">{done}/{total} 完成</span>
+                      <span className="text-xs font-semibold text-gray-700">{group.project?.name || "未分类"}</span>
+                      <span className="text-[10px] text-gray-400 ml-auto tabular-nums">{done}/{total} 完成</span>
                     </div>
                     <ProgressBar total={total} done={done} color={pc} />
                   </div>
@@ -286,11 +323,11 @@ export default function Home() {
                     ) : gt.map(todo => (
                       <div key={todo.id} className="flex items-start gap-1.5 py-0.5">
                         <button onClick={() => handleToggle(todo.id, !todo.completed)}
-                          className={`mt-0.5 w-3 h-3 rounded-full border flex-shrink-0 ${todo.completed ? "bg-emerald-500 border-emerald-500" : "border-gray-300"}`} />
+                          className={`mt-0.5 w-3 h-3 rounded-full border flex-shrink-0 transition-all ${todo.completed ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-blue-400"}`} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className={`text-[11px] truncate ${todo.completed ? "text-gray-400 line-through" : "text-gray-700"}`}>{todo.title}</span>
-                            <span className="text-[9px] px-1 py-[0.5px] rounded bg-gray-100 text-gray-400 flex-shrink-0">{ZONE_NAME[todo.zone] || "待分配"}</span>
+                            <span className="text-[9px] px-1 py-[0.5px] rounded bg-gray-100 text-gray-400 flex-shrink-0">{ZONE_NAME[todo.zone] || "待办池"}</span>
                           </div>
                           {todo.description && (
                             <p className="text-[10px] text-gray-400 truncate mt-0.5">{todo.description}</p>

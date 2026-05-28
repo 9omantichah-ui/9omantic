@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "待办任务管理",
-  description: "一个简洁高效的待办任务管理系统",
+  title: "ActionFlow · 行动秩序",
+  description: "随手记录，灵活规划，高效执行",
 };
 
 export default function RootLayout({
