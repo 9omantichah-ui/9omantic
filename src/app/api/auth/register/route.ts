@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     return res;
   } catch (error) {
     console.error("register error:", error);
-    return NextResponse.json({ error: "注册失败" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "注册失败";
+    return NextResponse.json({ error: "注册失败: " + msg }, { status: 500 });
   }
 }
