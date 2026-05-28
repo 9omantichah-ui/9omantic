@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import makePrisma from "@/lib/prisma";
 
 // GET - 获取待办事项（支持日期过滤）
 export async function GET(request: NextRequest) {
   try {
+    const prisma = await makePrisma();
     const { searchParams } = new URL(request.url);
     const showAll = searchParams.get("showAll") === "true";
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
 // POST - 创建新的待办事项
 export async function POST(request: NextRequest) {
   try {
+    const prisma = await makePrisma();
     const body = await request.json();
     const { title, description, priority, projectId, zone, scheduledDate } = body;
 

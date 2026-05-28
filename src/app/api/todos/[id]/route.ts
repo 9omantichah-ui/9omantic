@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import makePrisma from "@/lib/prisma";
 
-// GET - 获取单个待办事项
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const prisma = await makePrisma();
     const todo = await prisma.todo.findUnique({
       where: { id: params.id },
       include: { project: true },
@@ -20,12 +20,12 @@ export async function GET(
   }
 }
 
-// PUT - 更新待办事项
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const prisma = await makePrisma();
     const body = await request.json();
     const { title, description, completed, priority, projectId, zone, order, scheduledDate } = body;
 
@@ -51,12 +51,12 @@ export async function PUT(
   }
 }
 
-// DELETE - 删除待办事项
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const prisma = await makePrisma();
     await prisma.todo.delete({ where: { id: params.id } });
     return NextResponse.json({ message: "删除成功" });
   } catch (error) {
