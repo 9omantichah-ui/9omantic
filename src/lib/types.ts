@@ -11,6 +11,7 @@ export interface Todo {
   title: string;
   description: string | null;
   completed: boolean;
+  completedAt: string | null;
   priority: "low" | "medium" | "high";
   zone: number; // 1, 2, 3
   order: number;

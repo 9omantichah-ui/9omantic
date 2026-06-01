@@ -3,7 +3,7 @@ import { queryAll, execute } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
 
 function toTodo(t: Record<string, unknown>) {
-  return { ...t, completed: Boolean(t.completed), project: t.p_id ? { id: t.p_id, name: t.p_name, color: t.p_color } : null };
+  return { ...t, completed: Boolean(t.completed), completedAt: t.completedAt || null, project: t.p_id ? { id: t.p_id, name: t.p_name, color: t.p_color } : null };
 }
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -33,6 +33,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     for (const [key, col] of Object.entries(fields)) {
       if (body[key] !== undefined) { sets.push(`${col} = ?`); vals.push(body[key] === "" ? null : body[key]); }
     }
+    // 勾选完成时记录 completedAt，取消完成时清空
+    if (body.completed === true) { sets.push("completedAt = ?"); vals.push(new Date().toISOString()); }
+    else if (body.completed === false) { sets.push("completedAt = ?"); vals.push(null); }
     sets.push("updatedAt = ?"); vals.push(new Date().toISOString());
     vals.push(params.id); vals.push(userId);
     await execute(`UPDATE Todo SET ${sets.join(", ")} WHERE id = ? AND userId = ?`, vals);

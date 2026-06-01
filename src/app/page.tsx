@@ -14,6 +14,13 @@ const ZONES = [
 ];
 const ZONE_NAME: Record<number, string> = { 0: "未整理", 1: "优先做", 2: "稍后做", 3: "晚点做" };
 
+function isToday(dateStr: string | null): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
 function ProgressBar({ total, done, color }: { total: number; done: number; color: string }) {
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const barColor = pct >= 100 ? "#10b981" : pct >= 70 ? color : pct >= 30 ? "#f59e0b" : "#ef4444";
@@ -118,7 +125,7 @@ export default function Home() {
     const sI = result.source.index, dI = result.destination.index;
     if (sZ === dZ && sI === dI) return;
     const g: Record<number, Todo[]> = { 0: [], 1: [], 2: [], 3: [] };
-    todos.forEach(t => { if (g[t.zone] !== undefined) g[t.zone].push(t); });
+    todos.forEach(t => { if (g[t.zone] !== undefined && (!t.completed || isToday(t.completedAt))) g[t.zone].push(t); });
     const [m] = g[sZ].splice(sI, 1); m.zone = dZ; g[dZ].splice(dI, 0, m);
     const upd: Todo[] = [], items: { id: string; zone: number; order: number }[] = [];
     for (const z of [0,1,2,3]) g[z].forEach((t, i) => { upd.push({ ...t, zone: z, order: i }); items.push({ id: t.id, zone: z, order: i }); });
@@ -250,7 +257,7 @@ export default function Home() {
           <h2 className="text-sm font-bold text-gray-800 mb-2">已安排的「待办」</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {ZONES.map(zone => {
-              const zt = todos.filter(t => t.zone === zone.id);
+              const zt = todos.filter(t => t.zone === zone.id && (!t.completed || isToday(t.completedAt)));
               const total = zt.length, done = zt.filter(t => t.completed).length;
               return (
                 <div key={zone.id} className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
