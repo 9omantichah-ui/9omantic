@@ -20,3 +20,17 @@ export interface Todo {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface RecurringTodo {
+  id: string;
+  title: string;
+  projectId: string | null;
+  project: Project | null;
+  repeatDays: string[]; // e.g. ["周一", "周三", "周五"]
+  note: string | null;
+  completedDates: string[]; // e.g. ["2026-05-29"]
+  generatedDates: string[]; // e.g. ["2026-05-29"]
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+}

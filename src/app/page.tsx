@@ -40,6 +40,7 @@ export default function Home() {
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDesc, setShowDesc] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const initialLoadedRef = useRef(false);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(data => {
@@ -48,10 +49,29 @@ export default function Home() {
     }).catch(() => setAuthChecked(true));
   }, []);
 
+  // 保活 ping：随机间隔请求 /api/health，防止 Render 免费实例休眠
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const scheduleNext = () => {
+      // 随机 9~14 分钟，避免固定间隔被平台识别为保活请求
+      const delay = (9 + Math.random() * 5) * 60 * 1000;
+      timer = setTimeout(() => {
+        fetch("/api/health").catch(() => {});
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+    return () => clearTimeout(timer);
+  }, []);
+
   const fetchTodos = useCallback(async () => {
     if (!user) return;
-    try { setTodos(await (await fetch("/api/todos")).json()); }
-    catch (e) { console.error(e); } finally { setLoading(false); }
+    try {
+      const data = await (await fetch("/api/todos")).json();
+      setTodos(data);
+      if (!initialLoadedRef.current) { setLoading(false); initialLoadedRef.current = true; }
+    }
+    catch (e) { console.error(e); if (!initialLoadedRef.current) setLoading(false); }
   }, [user]);
   const fetchProjects = async () => {
     try { const data = await (await fetch("/api/projects")).json(); if (Array.isArray(data)) setProjects(data); } catch (e) { console.error(e); }

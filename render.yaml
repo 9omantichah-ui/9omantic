@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: actionflow
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    # 免费套餐不支持 cron，但可以设置健康检查路径
+    healthCheckPath: /api/health
+
+  # Render 免费套餐不支持 cron service
+  # 如果升级为付费套餐，可启用以下 cron 保活
+  # - type: cron
+  #   name: keep-alive
+  #   runtime: node
+  #   schedule: "*/14 * * * *"  # 每14分钟ping一次，防止休眠
+  #   buildCommand: echo "no build needed"
+  #   startCommand: "curl -s $RENDER_EXTERNAL_URL/api/health || true"

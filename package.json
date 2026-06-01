@@ -1,7 +1,8 @@
 {
-  "name": "todolist",
+"name": "todolist",
   "version": "1.0.0",
   "private": true,
+  "main": "electron-main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,7 +10,10 @@
     "lint": "next lint",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "electron": "electron electron-main.js",
+    "electron:dev": "NODE_ENV=development electron electron-main.js",
+    "electron:build": "npm run build && electron-builder"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -26,11 +30,36 @@
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.19",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3",
     "eslint": "^8.57.0",
     "eslint-config-next": "^15.5.18",
     "postcss": "^8.4.38",
     "prisma": "^5.14.0",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.0"
+  },
+  "build": {
+    "appId": "com.actionflow.todolist",
+    "productName": "ActionFlow",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "public/**/*",
+      ".next/**/*",
+      "electron-main.js",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }
