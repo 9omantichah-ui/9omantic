@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { Todo, Project } from "@/lib/types";
+import { Todo, Project, ProjectGroup } from "@/lib/types";
 import TodoItem from "@/components/TodoItem";
 import AuthForm from "@/components/AuthForm";
+import ProjectGroupSelector from "@/components/ProjectGroupSelector";
+import DailyPlanSection from "@/components/DailyPlanSection";
+import ProjectOverview from "@/components/ProjectOverview";
 import Image from "next/image";
 
 const ZONES = [
@@ -12,7 +15,6 @@ const ZONES = [
   { id: 2, name: "稍后做", accent: "#f97316", empty: "不急但重要的待办放这里" },
   { id: 3, name: "晚点做", accent: "#3b82f6", empty: "有空再处理的待办放这里" },
 ];
-const ZONE_NAME: Record<number, string> = { 0: "未整理", 1: "优先做", 2: "稍后做", 3: "晚点做" };
 
 function isToday(dateStr: string | null): boolean {
   if (!dateStr) return false;
@@ -39,12 +41,11 @@ export default function Home() {
   const [authChecked, setAuthChecked] = useState(false);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [createProjectId, setCreateProjectId] = useState("");
   const [createTitle, setCreateTitle] = useState("");
   const [createDesc, setCreateDesc] = useState("");
-  const [newProjectName, setNewProjectName] = useState("");
-  const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDesc, setShowDesc] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialLoadedRef = useRef(false);
@@ -56,16 +57,12 @@ export default function Home() {
     }).catch(() => setAuthChecked(true));
   }, []);
 
-  // 保活 ping：随机间隔请求 /api/health，防止 Render 免费实例休眠
+  // 保活 ping
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const scheduleNext = () => {
-      // 随机 9~14 分钟，避免固定间隔被平台识别为保活请求
       const delay = (9 + Math.random() * 5) * 60 * 1000;
-      timer = setTimeout(() => {
-        fetch("/api/health").catch(() => {});
-        scheduleNext();
-      }, delay);
+      timer = setTimeout(() => { fetch("/api/health").catch(() => {}); scheduleNext(); }, delay);
     };
     scheduleNext();
     return () => clearTimeout(timer);
@@ -77,13 +74,21 @@ export default function Home() {
       const data = await (await fetch("/api/todos")).json();
       setTodos(data);
       if (!initialLoadedRef.current) { setLoading(false); initialLoadedRef.current = true; }
-    }
-    catch (e) { console.error(e); if (!initialLoadedRef.current) setLoading(false); }
+    } catch (e) { console.error(e); if (!initialLoadedRef.current) setLoading(false); }
   }, [user]);
+
   const fetchProjects = async () => {
     try { const data = await (await fetch("/api/projects")).json(); if (Array.isArray(data)) setProjects(data); } catch (e) { console.error(e); }
   };
-  useEffect(() => { if (user) fetchProjects(); }, [user]);
+
+  const fetchProjectGroups = async () => {
+    try {
+      const data = await (await fetch("/api/project-groups")).json();
+      if (data.groups) setProjectGroups(data.groups);
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => { if (user) { fetchProjects(); fetchProjectGroups(); } }, [user]);
   useEffect(() => { if (user) fetchTodos(); }, [fetchTodos, user]);
 
   const handleCreate = async () => {
@@ -96,15 +101,40 @@ export default function Home() {
     setCreateTitle(""); setCreateDesc(""); setShowDesc(false);
     inputRef.current?.focus();
   };
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
+
+  const handleCreateProject = async (name: string, groupId?: string) => {
     const cs = ["#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444"];
     try {
       const r = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newProjectName.trim(), color: cs[projects.length % cs.length] }) });
-      if (r.ok) { setNewProjectName(""); setShowProjectForm(false); fetchProjects(); }
+        body: JSON.stringify({ name, color: cs[projects.length % cs.length], groupId }) });
+      if (r.ok) { fetchProjects(); fetchProjectGroups(); }
     } catch (e) { console.error(e); }
   };
+
+  const handleCreateGroup = async (name: string) => {
+    try {
+      const r = await fetch("/api/project-groups", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }) });
+      if (r.ok) fetchProjectGroups();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleToggleGroupCollapse = async (groupId: string, collapsed: boolean) => {
+    setProjectGroups(prev => prev.map(g => g.id === groupId ? { ...g, collapsed } : g));
+    try {
+      await fetch(`/api/project-groups/${groupId}`, { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collapsed }) });
+    } catch (e) { console.error(e); }
+  };
+
+  const handleMoveProject = async (projectId: string, groupId: string | null) => {
+    try {
+      await fetch("/api/projects", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: [{ id: projectId, order: 0, groupId }] }) });
+      fetchProjects(); fetchProjectGroups();
+    } catch (e) { console.error(e); }
+  };
+
   const handleToggle = async (id: string, c: boolean) => {
     try { const r = await fetch(`/api/todos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: c }) });
       if (r.ok) { const u = await r.json(); setTodos(p => p.map(t => t.id === id ? u : t)); }
@@ -119,6 +149,7 @@ export default function Home() {
     try { const r = await fetch(`/api/todos/${id}`, { method: "DELETE" }); if (r.ok) setTodos(p => p.filter(t => t.id !== id)); }
     catch (e) { console.error(e); }
   };
+
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const sZ = parseInt(result.source.droppableId), dZ = parseInt(result.destination.droppableId);
@@ -132,12 +163,6 @@ export default function Home() {
     setTodos(upd);
     try { await fetch("/api/todos/reorder", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) }); }
     catch (e) { console.error(e); }
-  };
-  const projectGroups = () => {
-    const g: Record<string, { project: Project | null; todos: Todo[] }> = { _none: { project: null, todos: [] } };
-    projects.forEach(p => { g[p.id] = { project: p, todos: [] }; });
-    todos.forEach(t => { const k = t.projectId || "_none"; if (g[k]) g[k].todos.push(t); else g._none.todos.push(t); });
-    return Object.values(g);
   };
 
   if (!authChecked) return <div className="min-h-screen flex items-center justify-center"><span className="text-gray-400 text-sm">加载中...</span></div>;
@@ -174,7 +199,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ── 添加一个「待办」 ── */}
+        {/* ── 添加待办 ── */}
         <section className="mb-6">
           <h2 className="text-sm font-bold text-gray-800 mb-2">添加一个「待办」</h2>
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3.5">
@@ -185,27 +210,21 @@ export default function Home() {
                 className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder:text-gray-400 transition-all" />
               <button onClick={handleCreate}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${createTitle.trim() ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.97]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
-                disabled={!createTitle.trim()}>添加待办</button>
+            disabled={!createTitle.trim()}>添加待办</button>
             </div>
-            <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setCreateProjectId("")}
-                className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${createProjectId === "" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>未分类</button>
-              {projects.map(p => (
-                <button key={p.id} onClick={() => setCreateProjectId(p.id)}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium text-white transition-all ${createProjectId === p.id ? "ring-2 ring-offset-1 ring-gray-300" : "opacity-55 hover:opacity-85"}`}
-                  style={{ backgroundColor: p.color }}>{p.name}</button>
-              ))}
-              {showProjectForm ? (
-                <span className="inline-flex items-center gap-1">
-                  <input type="text" placeholder="项目名" value={newProjectName} onChange={e => setNewProjectName(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleCreateProject()}
-                    className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] text-gray-700 w-16 focus:outline-none focus:ring-1 focus:ring-blue-400" autoFocus />
-                  <button onClick={handleCreateProject} className="text-[10px] text-blue-600 font-medium">确定</button>
-                  <button onClick={() => { setShowProjectForm(false); setNewProjectName(""); }} className="text-[10px] text-gray-400">取消</button>
-                </span>
-              ) : (
-                <button onClick={() => setShowProjectForm(true)} className="px-1.5 py-0.5 rounded-full text-[10px] border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-500">+ 新建项目</button>
-              )}
+            <div className="mt-2.5">
+              <ProjectGroupSelector
+                projects={projects}
+                projectGroups={projectGroups}
+                selectedProjectId={createProjectId}
+                onSelectProject={setCreateProjectId}
+                onCreateProject={handleCreateProject}
+                onCreateGroup={handleCreateGroup}
+                onToggleGroupCollapse={handleToggleGroupCollapse}
+                onMoveProject={handleMoveProject}
+              />
+            </div>
+            <div className="mt-2 flex items-center">
               <button onClick={() => setShowDesc(!showDesc)}
                 className={`px-1.5 py-0.5 rounded-full text-[10px] transition-all ${showDesc ? "bg-gray-200 text-gray-600" : "text-gray-400 hover:text-gray-500"}`}>
                 {showDesc ? "收起备注" : "+ 备注"}
@@ -218,7 +237,10 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── 未整理的「待办」 ── */}
+        {/* ── 当日计划 ── */}
+        <DailyPlanSection todos={todos} projects={projects} />
+
+        {/* ── 未整理的「待办」── 双列展示 */}
         <section className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-bold text-gray-800">未整理的「待办」<span className="ml-2 text-[11px] font-normal text-gray-400">{poolTodos.length} 项</span></h2>
@@ -228,11 +250,11 @@ export default function Home() {
           </div>
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
            <Droppable droppableId="0">
-              {(provided, snapshot) =>(
+              {(provided, snapshot) => (
                 <div ref={provided.innerRef} {...provided.droppableProps}
-                  className={`space-y-1.5 min-h-[3rem] rounded-lg p-1 transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
+                  className={`grid grid-cols-1 md:grid-cols-2 gap-1.5 min-h-[3rem] rounded-lg p-1 transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
                   {poolTodos.length === 0 && !snapshot.isDraggingOver && (
-                    <div className="text-center py-5 text-sm text-gray-300">暂无未整理待办</div>
+                    <div className="col-span-full text-center py-5 text-sm text-gray-300">暂无未整理待办</div>
                   )}
                   {poolTodos.map((todo, i) => (
                     <Draggable key={todo.id} draggableId={todo.id} index={i}>
@@ -293,7 +315,7 @@ export default function Home() {
                           {provided.placeholder}
                         </div>
                       )}
-           </Droppable>
+                    </Droppable>
                   </div>
                 </div>
               );
@@ -301,45 +323,8 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── 各项目情况概览 ── */}
-        <section className="mb-8">
-          <h2 className="text-xs font-semibold text-gray-400 mb-2.5">各项目情况概览</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {projectGroups().map(group => {
-              const gt = group.todos, total = gt.length, done = gt.filter(t => t.completed).length;
-              const pc = group.project?.color || "#94a3b8";
-              return (
-                <div key={group.project?.id || "_none"} className="bg-white/90 rounded-lg border border-gray-200/80 shadow-sm overflow-hidden">
-                  <div className="px-3.5 py-2 border-b border-gray-100">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: pc }} />
-                      <span className="text-xs font-semibold text-gray-700">{group.project?.name || "未分类"}</span>
-                      <span className="text-[10px] text-gray-400 ml-auto tabular-nums">{done}/{total}</span>
-                    </div>
-                    <ProgressBar total={total} done={done} color={pc} />
-                  </div>
-                  <div className="px-3.5 py-2 space-y-1 max-h-[180px] overflow-y-auto">
-                    {gt.length === 0 ? (
-                      <div className="text-center py-3 text-[11px] text-gray-300">暂无待办</div>
-                    ) : gt.map(todo => (
-                      <div key={todo.id} className="flex items-start gap-1.5 py-0.5">
-                        <button onClick={() => handleToggle(todo.id, !todo.completed)}
-                          className={`mt-0.5 w-3 h-3 rounded-full border flex-shrink-0 transition-all ${todo.completed ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-blue-400"}`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-[11px] truncate ${todo.completed ? "text-gray-400 line-through" : "text-gray-700"}`}>{todo.title}</span>
-                            <span className="text-[9px] px-1 py-[0.5px] rounded bg-gray-100 text-gray-400 flex-shrink-0">{ZONE_NAME[todo.zone]}</span>
-                          </div>
-                          {todo.description && <p className="text-[10px] text-gray-400 truncate mt-0.5">{todo.description}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        {/* ─ 各项目情况概览 ── */}
+        <ProjectOverview todos={todos} projects={projects} onToggle={handleToggle} />
       </div>
     </main>
     </DragDropContext>

@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryAll, execute } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
+import { encrypt, decrypt } from "@/lib/encrypt";
+
+function dec(v: unknown): string | null {
+  if (!v || typeof v !== "string") return v as string | null;
+  try { return decrypt(v); } catch { return v; }
+}
 
 function parseRow(r: Record<string, unknown>) {
   return {
-    id: r.id, title: r.title, projectId: r.projectId,
-    project: r.p_id ? { id: r.p_id, name: r.p_name, color: r.p_color } : null,
+    id: r.id, title: dec(r.title), projectId: r.projectId,
+    project: r.p_id ? { id: r.p_id, name: dec(r.p_name), color: r.p_color } : null,
     repeatDays: JSON.parse((r.repeatDays as string) || "[]"),
-    note: r.note,
+    note: dec(r.note),
     completedDates: JSON.parse((r.completedDates as string) || "[]"),
     generatedDates: JSON.parse((r.generatedDates as string) || "[]"),
     userId: r.userId, createdAt: r.createdAt, updatedAt: r.updatedAt,
@@ -39,10 +45,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.title !== undefined || body.projectId !== undefined || body.repeatDays !== undefined || body.note !== undefined) {
       const sets: string[] = [];
       const vals: unknown[] = [];
-      if (body.title !== undefined) { sets.push("title = ?"); vals.push(body.title.trim()); }
+      if (body.title !== undefined) { sets.push("title = ?"); vals.push(encrypt(body.title.trim())); }
       if (body.projectId !== undefined) { sets.push("projectId = ?"); vals.push(body.projectId || null); }
       if (body.repeatDays !== undefined) { sets.push("repeatDays = ?"); vals.push(JSON.stringify(body.repeatDays)); }
-      if (body.note !== undefined) { sets.push("note = ?"); vals.push(body.note?.trim() || null); }
+      if (body.note !== undefined) { sets.push("note = ?"); vals.push(body.note?.trim() ? encrypt(body.note.trim()) : null); }
       sets.push("updatedAt = ?"); vals.push(now);
       vals.push(id, userId);
       await execute(`UPDATE RecurringTodo SET ${sets.join(", ")} WHERE id = ? AND userId = ?`, vals);

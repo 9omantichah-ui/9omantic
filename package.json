@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push",
+    "db:migrate-v2": "node scripts/migrate-v2.mjs",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "electron": "electron electron-main.js",

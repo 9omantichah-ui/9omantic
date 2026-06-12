@@ -1,7 +1,19 @@
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  order: number;
+  collapsed: boolean;
+  userId: string;
+  createdAt: string;
+  projects: Project[];
+}
+
 export interface Project {
   id: string;
   name: string;
   color: string;
+  groupId: string | null;
+  order: number;
   createdAt: string;
   _count?: { todos: number };
 }
@@ -13,13 +25,32 @@ export interface Todo {
   completed: boolean;
   completedAt: string | null;
   priority: "low" | "medium" | "high";
-  zone: number; // 1, 2, 3
+  zone: number; // 0=未整理, 1=优先做, 2=稍后做, 3=晚点做
   order: number;
   scheduledDate: string | null;
   projectId: string | null;
   project: Project | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DailyPlan {
+  id: string;
+  date: string; // YYYY-MM-DD
+  userId: string;
+  createdAt: string;
+  items: DailyPlanItem[];
+}
+
+export interface DailyPlanItem {
+  id: string;
+  planId: string;
+  todoId: string;
+  order: number;
+  status: "pending" | "in_progress" | "completed";
+  userId: string;
+  createdAt: string;
+  todo?: Todo;
 }
 
 export interface RecurringTodo {

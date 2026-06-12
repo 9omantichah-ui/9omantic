@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryAll, execute, cuid } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
+import { encrypt, decrypt } from "@/lib/encrypt";
+
+function dec(v: unknown): string | null {
+  if (!v || typeof v !== "string") return v as string | null;
+  try { return decrypt(v); } catch { return v; }
+}
 
 export async function GET() {
   try {
@@ -14,11 +20,11 @@ export async function GET() {
     );
     const result = rows.map((r: Record<string, unknown>) => ({
       id: r.id,
-      title: r.title,
+      title: dec(r.title),
       projectId: r.projectId,
-      project: r.p_id ? { id: r.p_id, name: r.p_name, color: r.p_color } : null,
+      project: r.p_id ? { id: r.p_id, name: dec(r.p_name), color: r.p_color } : null,
       repeatDays: JSON.parse((r.repeatDays as string) || "[]"),
-      note: r.note,
+      note: dec(r.note),
       completedDates: JSON.parse((r.completedDates as string) || "[]"),
       generatedDates: JSON.parse((r.generatedDates as string) || "[]"),
       userId: r.userId,
@@ -45,7 +51,7 @@ export async function POST(request: NextRequest) {
     await execute(
       `INSERT INTO RecurringTodo (id, title, projectId, repeatDays, note, completedDates, generatedDates, userId, createdAt, updatedAt)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, title.trim(), projectId || null, JSON.stringify(repeatDays), note?.trim() || null, "[]", "[]", userId, now, now]
+      [id, encrypt(title.trim()), projectId || null, JSON.stringify(repeatDays), note?.trim() ? encrypt(note.trim()) : null, "[]", "[]", userId, now, now]
     );
 
     const rows = await queryAll(
@@ -55,10 +61,10 @@ export async function POST(request: NextRequest) {
     );
     const r = rows[0] as Record<string, unknown>;
     return NextResponse.json({
-      id: r.id, title: r.title, projectId: r.projectId,
-      project: r.p_id ? { id: r.p_id, name: r.p_name, color: r.p_color } : null,
+      id: r.id, title: dec(r.title), projectId: r.projectId,
+      project: r.p_id ? { id: r.p_id, name: dec(r.p_name), color: r.p_color } : null,
       repeatDays: JSON.parse((r.repeatDays as string) || "[]"),
-      note: r.note, completedDates: [], generatedDates: [],
+      note: dec(r.note), completedDates: [], generatedDates: [],
       userId: r.userId, createdAt: r.createdAt, updatedAt: r.updatedAt,
     }, { status: 201 });
   } catch (error) {
