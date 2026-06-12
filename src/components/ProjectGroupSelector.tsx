@@ -31,7 +31,7 @@ export default function ProjectGroupSelector({
   const [newGroupName, setNewGroupName] = useState("");
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
 
-  const ungroupedProjects = projects.filter(p => !p.groupId);
+  const ungroupedProjects = projects.filter(p => !p.groupId && !projectGroups.some(g => g.projects.some(gp => gp.id === p.id)));
 
   const handleCreateProject = () => {
     if (!newProjectName.trim()) return;
@@ -49,12 +49,14 @@ export default function ProjectGroupSelector({
   };
 
   const handleDragStart = (e: React.DragEvent, projectId: string) => {
+    e.stopPropagation();
     e.dataTransfer.setData("projectId", projectId);
     e.dataTransfer.effectAllowed = "move";
   };
 
   const handleDragOver = (e: React.DragEvent, groupId: string | null) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
     setDragOverGroupId(groupId);
   };
@@ -65,6 +67,7 @@ export default function ProjectGroupSelector({
 
   const handleDrop = (e: React.DragEvent, groupId: string | null) => {
     e.preventDefault();
+    e.stopPropagation();
     const projectId = e.dataTransfer.getData("projectId");
     if (projectId) {
       onMoveProject(projectId, groupId);
