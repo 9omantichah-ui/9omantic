@@ -97,9 +97,19 @@ export default function Home() {
       if (createDesc.trim()) body.description = createDesc.trim();
       if (createProjectId) body.projectId = createProjectId;
       const r = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (r.ok) { const n = await r.json(); setTodos(p => [...p, n]); }
-    } catch (e) { console.error(e); }
-    setCreateTitle(""); setCreateDesc(""); setShowDesc(false);
+      if (r.ok) {
+        const n = await r.json();
+        setTodos(p => [...p, n]);
+        setCreateTitle(""); setCreateDesc(""); setShowDesc(false);
+      } else {
+        const err = await r.text();
+        console.error("创建待办失败:", r.status, err);
+        alert(`创建失败 (${r.status}): ${err}`);
+      }
+    } catch (e) {
+      console.error("创建待办网络错误:", e);
+      alert("网络错误，请检查连接");
+    }
     inputRef.current?.focus();
   };
 
