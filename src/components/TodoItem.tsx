@@ -13,6 +13,7 @@ interface TodoItemProps {
   onToggle: (id: string, completed: boolean) => void;
   onUpdate: (id: string, data: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
+  onAddToPlan?: (todoId: string) => void;
   dragHandleProps?: object;
 }
 
@@ -26,7 +27,7 @@ const ZONE_LABELS: Record<number, { text: string; cls: string }> = {
 const COMPLETE_MSGS = ["完成一件，秩序 +1", "漂亮，又少一件", "清爽了一点", "干得不错", "搞定！"];
 
 export default function TodoItem({
-  todo, projects, compact, showZoneBadge, hideProject, onToggle, onUpdate, onDelete,
+  todo, projects, compact, showZoneBadge, hideProject, onToggle, onUpdate, onDelete, onAddToPlan,
 }: TodoItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -140,6 +141,18 @@ export default function TodoItem({
 
         {/* 操作按钮 */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
+          {onAddToPlan && !isDone && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => onAddToPlan(todo.id)}
+              className="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"
+              title="加入当日计划"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+          )}
           <button
             onMouseDown={e => e.stopPropagation()}
             onClick={() => setIsEditing(true)}

@@ -148,6 +148,13 @@ export default function Home() {
     catch (e) { console.error(e); }
   };
 
+  const handleAddToPlan = async (todoId: string) => {
+    try {
+      const date = new Date().toISOString().split("T")[0];
+      await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId, date }) });
+    } catch (e) { console.error(e); }
+  };
+
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const sZ = parseInt(result.source.droppableId), dZ = parseInt(result.destination.droppableId);
@@ -202,7 +209,7 @@ export default function Home() {
           <div className="flex-1 min-w-0">
 
             {/* ── 添加待办 ── */}
-            <section className="mb-6">
+            <section className="mb-6" onMouseDown={e => e.stopPropagation()}>
               <h2 className="text-sm font-bold text-gray-800 mb-2">添加一个「待办」</h2>
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3.5">
                 <div className="flex items-center gap-3">
@@ -210,7 +217,7 @@ export default function Home() {
                     onChange={e => setCreateTitle(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleCreate(); }}
                     className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder:text-gray-400 transition-all" />
-                  <button onClick={handleCreate}
+                  <button type="button" onClick={handleCreate}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${createTitle.trim() ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.97]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
                     disabled={!createTitle.trim()}>添加待办</button>
                 </div>
@@ -261,7 +268,7 @@ export default function Home() {
                             <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
                               className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""}`}>
                               <TodoItem todo={todo} projects={projects} compact
-                                onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} />
+                                onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onAddToPlan={handleAddToPlan} />
                             </div>
                           )}
                         </Draggable>
@@ -306,7 +313,7 @@ export default function Home() {
                                     <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
                                       className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""}`}>
                                       <TodoItem todo={todo} projects={projects} compact
-                                        onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} />
+                                        onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onAddToPlan={handleAddToPlan} />
                                     </div>
                                   )}
                                 </Draggable>

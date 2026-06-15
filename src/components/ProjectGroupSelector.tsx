@@ -29,7 +29,7 @@ export default function ProjectGroupSelector({
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectGroupId, setNewProjectGroupId] = useState<string>("");
   const [newGroupName, setNewGroupName] = useState("");
-  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
+  const [moveMenuId, setMoveMenuId] = useState<string | null>(null);
 
   const ungroupedProjects = projects.filter(p => !p.groupId && !projectGroups.some(g => g.projects.some(gp => gp.id === p.id)));
 
@@ -48,43 +48,12 @@ export default function ProjectGroupSelector({
     setShowGroupForm(false);
   };
 
-  const handleDragStart = (e: React.DragEvent, projectId: string) => {
-    e.stopPropagation();
-    e.dataTransfer.setData("projectId", projectId);
-    e.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleDragOver = (e: React.DragEvent, groupId: string | null) => {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverGroupId(groupId);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverGroupId(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, groupId: string | null) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const projectId = e.dataTransfer.getData("projectId");
-    if (projectId) {
-      onMoveProject(projectId, groupId);
-    }
-    setDragOverGroupId(null);
-  };
-
   return (
-    <div className="space-y-2">
-      {/* 未分类按钮 */}
-      <div
-        className="flex items-center gap-1.5 flex-wrap"
-        onDragOver={(e) => handleDragOver(e, null)}
-        onDragLeave={handleDragLeave}
-        onDrop={(e) => handleDrop(e, null)}
-      >
+    <div className="space-y-1.5" onMouseDown={e => e.stopPropagation()}>
+      {/* 未分组项目 */}
+      <div className="flex items-center gap-1.5 flex-wrap">
         <button
+          type="button"
           onClick={() => onSelectProject("")}
           className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
             selectedProjectId === "" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
@@ -93,33 +62,50 @@ export default function ProjectGroupSelector({
           未分类
         </button>
         {ungroupedProjects.map(p => (
-          <button
-            key={p.id}
-            draggable
-            onDragStart={(e) => handleDragStart(e, p.id)}
-            onClick={() => onSelectProject(p.id)}
-            className={`px-2 py-0.5 rounded-full text-[10px] font-medium text-white transition-all cursor-grab active:cursor-grabbing ${
-              selectedProjectId === p.id ? "ring-2 ring-offset-1 ring-gray-300" : "opacity-55 hover:opacity-85"
-            }`}
-            style={{ backgroundColor: p.color }}
-          >
-            {p.name}
-          </button>
+          <span key={p.id} className="relative inline-flex">
+            <button
+              type="button"
+              onClick={() => onSelectProject(p.id)}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-medium text-white transition-all ${
+                selectedProjectId === p.id ? "ring-2 ring-offset-1 ring-gray-300" : "opacity-60 hover:opacity-90"
+              }`}
+              style={{ backgroundColor: p.color }}
+            >
+              {p.name}
+            </button>
+            {projectGroups.length > 0 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setMoveMenuId(moveMenuId === p.id ? null : p.id); }}
+                className="ml-0.5 w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 hover:bg-gray-300 flex items-center justify-center text-[8px]"
+                title="移动到分组"
+              >
+                ↗
+              </button>
+            )}
+            {moveMenuId === p.id && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[80px]">
+                {projectGroups.map(g => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => { onMoveProject(p.id, g.id); setMoveMenuId(null); }}
+                    className="block w-full px-2.5 py-1 text-[10px] text-left text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    → {g.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </span>
         ))}
       </div>
 
       {/* 项目组 */}
       {projectGroups.map(group => (
-        <div
-          key={group.id}
-          className={`rounded-lg border transition-all ${
-            dragOverGroupId === group.id ? "border-blue-300 bg-blue-50/50" : "border-gray-100 bg-gray-50/50"
-          }`}
-          onDragOver={(e) => handleDragOver(e, group.id)}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, group.id)}
-        >
+        <div key={group.id} className="rounded-lg border border-gray-100 bg-gray-50/50">
           <button
+            type="button"
             onClick={() => onToggleGroupCollapse(group.id, !group.collapsed)}
             className="w-full flex items-center gap-1.5 px-2 py-1 text-left"
           >
@@ -135,28 +121,57 @@ export default function ProjectGroupSelector({
           {!group.collapsed && (
             <div className="flex items-center gap-1.5 flex-wrap px-2 pb-1.5">
               {group.projects.map(p => (
-                <button
-                  key={p.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, p.id)}
-                  onClick={() => onSelectProject(p.id)}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium text-white transition-all cursor-grab active:cursor-grabbing ${
-                    selectedProjectId === p.id ? "ring-2 ring-offset-1 ring-gray-300" : "opacity-55 hover:opacity-85"
-                  }`}
-                  style={{ backgroundColor: p.color }}
-                >
-                  {p.name}
-                </button>
+                <span key={p.id} className="relative inline-flex">
+                  <button
+                    type="button"
+                    onClick={() => onSelectProject(p.id)}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium text-white transition-all ${
+                      selectedProjectId === p.id ? "ring-2 ring-offset-1 ring-gray-300" : "opacity-60 hover:opacity-90"
+                    }`}
+                    style={{ backgroundColor: p.color }}
+                  >
+                    {p.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setMoveMenuId(moveMenuId === p.id ? null : p.id); }}
+                    className="ml-0.5 w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 hover:bg-gray-300 flex items-center justify-center text-[8px]"
+                    title="移出分组"
+                  >
+                    ↗
+                  </button>
+                  {moveMenuId === p.id && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[80px]">
+                      <button
+                        type="button"
+                        onClick={() => { onMoveProject(p.id, null); setMoveMenuId(null); }}
+                        className="block w-full px-2.5 py-1 text-[10px] text-left text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                      >
+                        → 未分组
+                      </button>
+                      {projectGroups.filter(g => g.id !== group.id).map(g => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => { onMoveProject(p.id, g.id); setMoveMenuId(null); }}
+                          className="block w-full px-2.5 py-1 text-[10px] text-left text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          → {g.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </span>
               ))}
               {group.projects.length === 0 && (
-                <span className="text-[9px] text-gray-300 italic">拖拽项目到此分组</span>
+                <span className="text-[9px] text-gray-300 italic">暂无项目</span>
               )}
             </div>
           )}
         </div>
       ))}
 
-      {/* 操作按钮区 */}
+      {/* 操作按钮 */}
       <div className="flex items-center gap-1.5 flex-wrap pt-1">
         {showProjectForm ? (
           <span className="inline-flex items-center gap-1">
@@ -165,7 +180,7 @@ export default function ProjectGroupSelector({
               placeholder="项目名"
               value={newProjectName}
               onChange={e => setNewProjectName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleCreateProject()}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleCreateProject(); } }}
               className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] text-gray-700 w-16 focus:outline-none focus:ring-1 focus:ring-blue-400"
               autoFocus
             />
@@ -181,11 +196,12 @@ export default function ProjectGroupSelector({
                 ))}
               </select>
             )}
-            <button onClick={handleCreateProject} className="text-[10px] text-blue-600 font-medium">确定</button>
-            <button onClick={() => { setShowProjectForm(false); setNewProjectName(""); }} className="text-[10px] text-gray-400">取消</button>
+            <button type="button" onClick={handleCreateProject} className="text-[10px] text-blue-600 font-medium">确定</button>
+            <button type="button" onClick={() => { setShowProjectForm(false); setNewProjectName(""); }} className="text-[10px] text-gray-400">取消</button>
           </span>
         ) : (
           <button
+            type="button"
             onClick={() => setShowProjectForm(true)}
             className="px-1.5 py-0.5 rounded-full text-[10px] border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-500"
           >
@@ -200,15 +216,16 @@ export default function ProjectGroupSelector({
               placeholder="分组名"
               value={newGroupName}
               onChange={e => setNewGroupName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleCreateGroup()}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleCreateGroup(); } }}
               className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] text-gray-700 w-16 focus:outline-none focus:ring-1 focus:ring-blue-400"
               autoFocus
             />
-            <button onClick={handleCreateGroup} className="text-[10px] text-blue-600 font-medium">确定</button>
-            <button onClick={() => { setShowGroupForm(false); setNewGroupName(""); }} className="text-[10px] text-gray-400">取消</button>
+            <button type="button" onClick={handleCreateGroup} className="text-[10px] text-blue-600 font-medium">确定</button>
+            <button type="button" onClick={() => { setShowGroupForm(false); setNewGroupName(""); }} className="text-[10px] text-gray-400">取消</button>
           </span>
         ) : (
           <button
+            type="button"
             onClick={() => setShowGroupForm(true)}
             className="px-1.5 py-0.5 rounded-full text-[10px] border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-500"
           >
