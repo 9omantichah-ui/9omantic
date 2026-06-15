@@ -177,7 +177,6 @@ export default function Home() {
   const poolTodos = todos.filter(t => t.zone === 0);
 
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
     <main className="min-h-screen py-6 px-4 lg:px-8 bg-[#f5f6f8]">
       <div className="max-w-[1400px] mx-auto">
 
@@ -203,48 +202,49 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ── 左右分栏：左边主内容，右边当日计划 ── */}
+        {/* ── 添加待办（在 DragDropContext 外面） ── */}
+        <section className="mb-6">
+          <h2 className="text-sm font-bold text-gray-800 mb-2">添加一个「待办」</h2>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3.5">
+            <div className="flex items-center gap-3">
+              <input ref={inputRef} type="text" placeholder="写下一个待办..." value={createTitle}
+                onChange={e => setCreateTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleCreate(); }}
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder:text-gray-400 transition-all" />
+              <button type="button" onClick={handleCreate}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${createTitle.trim() ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.97]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                disabled={!createTitle.trim()}>添加待办</button>
+            </div>
+            <div className="mt-2.5">
+              <ProjectGroupSelector
+                projects={projects}
+                projectGroups={projectGroups}
+                selectedProjectId={createProjectId}
+                onSelectProject={setCreateProjectId}
+                onCreateProject={handleCreateProject}
+                onCreateGroup={handleCreateGroup}
+                onToggleGroupCollapse={handleToggleGroupCollapse}
+                onMoveProject={handleMoveProject}
+              />
+            </div>
+            <div className="mt-2 flex items-center">
+              <button onClick={() => setShowDesc(!showDesc)}
+                className={`px-1.5 py-0.5 rounded-full text-[10px] transition-all ${showDesc ? "bg-gray-200 text-gray-600" : "text-gray-400 hover:text-gray-500"}`}>
+                {showDesc ? "收起备注" : "+ 备注"}
+              </button>
+            </div>
+            {showDesc && (
+              <textarea placeholder="备注（可选）" value={createDesc} onChange={e => setCreateDesc(e.target.value)} rows={2}
+                className="mt-2 w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 focus:outline-none focus:border-blue-400 resize-none placeholder:text-gray-400 transition-all" />
+            )}
+          </div>
+        </section>
+
+        {/* ── 左右分栏 ── */}
+        <DragDropContext onDragEnd={handleDragEnd}>
         <div className="flex gap-6 items-start">
           {/* 左侧主区域 */}
           <div className="flex-1 min-w-0">
-
-            {/* ── 添加待办 ── */}
-            <section className="mb-6" onMouseDown={e => e.stopPropagation()}>
-              <h2 className="text-sm font-bold text-gray-800 mb-2">添加一个「待办」</h2>
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3.5">
-                <div className="flex items-center gap-3">
-                  <input ref={inputRef} type="text" placeholder="写下一个待办..." value={createTitle}
-                    onChange={e => setCreateTitle(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleCreate(); }}
-                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder:text-gray-400 transition-all" />
-                  <button type="button" onClick={handleCreate}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${createTitle.trim() ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.97]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
-                    disabled={!createTitle.trim()}>添加待办</button>
-                </div>
-                <div className="mt-2.5">
-                  <ProjectGroupSelector
-                    projects={projects}
-                    projectGroups={projectGroups}
-                    selectedProjectId={createProjectId}
-                    onSelectProject={setCreateProjectId}
-                    onCreateProject={handleCreateProject}
-                    onCreateGroup={handleCreateGroup}
-                    onToggleGroupCollapse={handleToggleGroupCollapse}
-                    onMoveProject={handleMoveProject}
-                  />
-                </div>
-                <div className="mt-2 flex items-center">
-                  <button onClick={() => setShowDesc(!showDesc)}
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] transition-all ${showDesc ? "bg-gray-200 text-gray-600" : "text-gray-400 hover:text-gray-500"}`}>
-                    {showDesc ? "收起备注" : "+ 备注"}
-                  </button>
-                </div>
-                {showDesc && (
-                  <textarea placeholder="备注（可选）" value={createDesc} onChange={e => setCreateDesc(e.target.value)} rows={2}
-                    className="mt-2 w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 focus:outline-none focus:border-blue-400 resize-none placeholder:text-gray-400 transition-all" />
-                )}
-              </div>
-            </section>
 
             {/* ── 未整理的「待办」── 双列 */}
             <section className="mb-6">
@@ -336,6 +336,7 @@ export default function Home() {
             <DailyPlanSection todos={todos} projects={projects} />
           </div>
         </div>
+        </DragDropContext>
 
         {/* 移动端当日计划（lg以下显示） */}
         <div className="lg:hidden mb-6">
@@ -346,6 +347,5 @@ export default function Home() {
         <ProjectOverview todos={todos} projects={projects} onToggle={handleToggle} />
       </div>
     </main>
-    </DragDropContext>
   );
 }
