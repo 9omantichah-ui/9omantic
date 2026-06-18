@@ -4,9 +4,9 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
-function getKey(): Buffer {
+function getKey(): Buffer | null {
   const secret = process.env.ENCRYPTION_KEY;
-  if (!secret) throw new Error("ENCRYPTION_KEY 环境变量未设置");
+  if (!secret) return null; // 未配置密钥时降级为不加密
   return scryptSync(secret, "actionflow-salt", 32);
 }
 
@@ -15,6 +15,7 @@ function getKey(): Buffer {
  */
 export function encrypt(plaintext: string): string {
   const key = getKey();
+  if (!key) return plaintext; // 未配置密钥时直接返回明文
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
@@ -27,6 +28,7 @@ export function encrypt(plaintext: string): string {
  */
 export function decrypt(ciphertext: string): string {
   const key = getKey();
+  if (!key) return ciphertext; // 未配置密钥时假定是明文
   const [ivB64, authTagB64, dataB64] = ciphertext.split(":");
   if (!ivB64 || !authTagB64 || !dataB64) throw new Error("无效的加密格式");
   const iv = Buffer.from(ivB64, "base64");

@@ -3,11 +3,12 @@ import { execute } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
 
 // DELETE /api/daily-plan/[id] - 从当日计划中移除
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const userId = await getCurrentUserId();
     if (!userId) return NextResponse.json({ error: "未登录" }, { status: 401 });
-    await execute("DELETE FROM DailyPlanItem WHERE id = ? AND userId = ?", [params.id, userId]);
+    await execute("DELETE FROM DailyPlanItem WHERE id = ? AND userId = ?", [id, userId]);
     return NextResponse.json({ message: "移除成功" });
   } catch (error) {
     console.error("DELETE /api/daily-plan/[id] error:", error);

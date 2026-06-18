@@ -25,7 +25,7 @@ export function verifyToken(token: string): string | null {
 
 // 从 cookie 获取当前用户 ID
 export async function getCurrentUserId(): Promise<string | null> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get("auth_token")?.value;
   if (!token) return null;
   const userId = verifyToken(token);

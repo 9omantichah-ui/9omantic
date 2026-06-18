@@ -16,11 +16,12 @@ function toTodo(t: Record<string, unknown>) {
   };
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const userId = await getCurrentUserId();
     if (!userId) return NextResponse.json({ error: "未登录" }, { status: 401 });
-    const rows = await queryAll("SELECT t.*, p.id as p_id, p.name as p_name, p.color as p_color FROM Todo t LEFT JOIN Project p ON t.projectId = p.id WHERE t.id = ? AND t.userId = ?", [params.id, userId]);
+    const rows = await queryAll("SELECT t.*, p.id as p_id, p.name as p_name, p.color as p_color FROM Todo t LEFT JOIN Project p ON t.projectId = p.id WHERE t.id = ? AND t.userId = ?", [id, userId]);
     if (!rows[0]) return NextResponse.json({ error: "不存在" }, { status: 404 });
     return NextResponse.json(toTodo(rows[0] as Record<string, unknown>));
   } catch (error) {
@@ -28,8 +29,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const userId = await getCurrentUserId();
     if (!userId) return NextResponse.json({ error: "未登录" }, { status: 401 });
     const body = await request.json();
@@ -53,9 +55,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (body.completed === true) { sets.push("completedAt = ?"); vals.push(new Date().toISOString()); }
     else if (body.completed === false) { sets.push("completedAt = ?"); vals.push(null); }
     sets.push("updatedAt = ?"); vals.push(new Date().toISOString());
-    vals.push(params.id); vals.push(userId);
+    vals.push(id); vals.push(userId);
     await execute(`UPDATE Todo SET ${sets.join(", ")} WHERE id = ? AND userId = ?`, vals);
-    const rows = await queryAll("SELECT t.*, p.id as p_id, p.name as p_name, p.color as p_color FROM Todo t LEFT JOIN Project p ON t.projectId = p.id WHERE t.id = ?", [params.id]);
+    const rows = await queryAll("SELECT t.*, p.id as p_id, p.name as p_name, p.color as p_color FROM Todo t LEFT JOIN Project p ON t.projectId = p.id WHERE t.id = ?", [id]);
     return NextResponse.json(toTodo(rows[0] as Record<string, unknown>));
   } catch (error) {
     console.error("PUT error:", error);
@@ -63,11 +65,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const userId = await getCurrentUserId();
     if (!userId) return NextResponse.json({ error: "未登录" }, { status: 401 });
-    await execute("DELETE FROM Todo WHERE id = ? AND userId = ?", [params.id, userId]);
+    await execute("DELETE FROM Todo WHERE id = ? AND userId = ?", [id, userId]);
     return NextResponse.json({ message: "删除成功" });
   } catch (error) {
     return NextResponse.json({ error: "删除失败" }, { status: 500 });

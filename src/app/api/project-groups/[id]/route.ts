@@ -8,8 +8,9 @@ function dec(v: unknown): string | null {
   try { return decrypt(v); } catch { return v; }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const userId = await getCurrentUserId();
     if (!userId) return NextResponse.json({ error: "未登录" }, { status: 401 });
     const body = await request.json();
@@ -19,9 +20,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (body.order !== undefined) { sets.push('"order" = ?'); vals.push(body.order); }
     if (body.collapsed !== undefined) { sets.push("collapsed = ?"); vals.push(body.collapsed ? 1 : 0); }
     if (sets.length === 0) return NextResponse.json({ error: "无更新内容" }, { status: 400 });
-    vals.push(params.id); vals.push(userId);
+    vals.push(id); vals.push(userId);
     await execute(`UPDATE ProjectGroup SET ${sets.join(", ")} WHERE id = ? AND userId = ?`, vals);
-    const row = await queryAll("SELECT * FROM ProjectGroup WHERE id = ?", [params.id]);
+    const row = await queryAll("SELECT * FROM ProjectGroup WHERE id = ?", [id]);
     const g = row[0] as Record<string, unknown>;
     return NextResponse.json({ ...g, name: dec(g.name), collapsed: Boolean(g.collapsed) });
   } catch (error) {
@@ -30,13 +31,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const userId = await getCurrentUserId();
     if (!userId) return NextResponse.json({ error: "未登录" }, { status: 401 });
     // 将该组下的项目设置为未分组
-    await execute("UPDATE Project SET groupId = NULL WHERE groupId = ? AND userId = ?", [params.id, userId]);
-    await execute("DELETE FROM ProjectGroup WHERE id = ? AND userId = ?", [params.id, userId]);
+    await execute("UPDATE Project SET groupId = NULL WHERE groupId = ? AND userId = ?", [id, userId]);
+    await execute("DELETE FROM ProjectGroup WHERE id = ? AND userId = ?", [id, userId]);
     return NextResponse.json({ message: "删除成功" });
   } catch (error) {
     console.error("DELETE /api/project-groups/[id] error:", error);
