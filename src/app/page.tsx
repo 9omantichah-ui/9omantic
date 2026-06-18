@@ -57,15 +57,7 @@ export default function Home() {
     }).catch(() => setAuthChecked(true));
   }, []);
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const scheduleNext = () => {
-      const delay = (9 + Math.random() * 5) * 60 * 1000;
-      timer = setTimeout(() => { fetch("/api/health").catch(() => {}); scheduleNext(); }, delay);
-    };
-    scheduleNext();
-    return () => clearTimeout(timer);
-  }, []);
+  // 保活轮询已移除 — 使用外部 UptimeRobot 替代
 
   const fetchTodos = useCallback(async () => {
     if (!user) return;

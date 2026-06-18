@@ -1,28 +1,3 @@
-import { PrismaClient } from "@prisma/client";
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-async function makePrisma(): Promise<PrismaClient> {
-  if (globalForPrisma.prisma) return globalForPrisma.prisma;
-
-  if (process.env.TURSO_DATABASE_URL) {
-    const { createClient } = await import("@libsql/client");
-    const { PrismaLibSQL } = await import("@prisma/adapter-libsql");
-    const libsql = createClient({
-      url: process.env.TURSO_DATABASE_URL!,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
-    const adapter = new PrismaLibSQL(libsql);
-    const client = new PrismaClient({ adapter } as never);
-    if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
-    return client;
-  }
-
-  const client = new PrismaClient();
-  if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
-  return client;
-}
-
-export default makePrisma;
+// Prisma 已弃用，统一使用 @/lib/db (libSQL client)
+// 此文件保留以避免可能的旧导入报错
+export default async function makePrisma() { throw new Error("Prisma 已弃用，请使用 @/lib/db"); }
