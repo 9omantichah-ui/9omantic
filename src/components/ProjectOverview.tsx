@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Todo, Project } from "@/lib/types";
+import { Todo, Project, ProjectGroup } from "@/lib/types";
 
 const ZONE_NAME: Record<number, string> = { 0: "未整理", 1: "优先做", 2: "稍后做", 3: "晚点做" };
 const ZONE_CLS: Record<number, string> = {
@@ -14,6 +14,7 @@ const ZONE_CLS: Record<number, string> = {
 interface ProjectOverviewProps {
   todos: Todo[];
   projects: Project[];
+  projectGroups: ProjectGroup[];
   onToggle: (id: string, completed: boolean) => void;
 }
 
@@ -29,15 +30,46 @@ function ProgressBar({ total, done, color }: { total: number; done: number; colo
   );
 }
 
-export default function ProjectOverview({ todos, projects, onToggle }: ProjectOverviewProps) {
+export default function ProjectOverview({ todos, projects, projectGroups, onToggle }: ProjectOverviewProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [showCompletedMap, setShowCompletedMap] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  const projectGroups = () => {
-    const g: Record<string, { project: Project | null; todos: Todo[] }> = { _none: { project: null, todos: [] } };
-    projects.forEach(p => { g[p.id] = { project: p, todos: [] }; });
-    todos.forEach(t => { const k = t.projectId || "_none"; if (g[k]) g[k].todos.push(t); else g._none.todos.push(t); });
-    return Object.values(g);
+  const toggleGroupCollapse = (groupId: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      next.has(groupId) ? next.delete(groupId) : next.add(groupId);
+      return next;
+    });
+  };
+
+  // 按 ProjectGroup 聚合项目
+  const getGroupedData = () => {
+    // 分配 todos 到 project
+    const projectTodosMap: Record<string, Todo[]> = { _none: [] };
+    projects.forEach(p => { projectTodosMap[p.id] = []; });
+    todos.forEach(t => { const k = t.projectId || "_none"; if (projectTodosMap[k]) projectTodosMap[k].push(t); else projectTodosMap._none.push(t); });
+
+    // 按分组聚合
+    const grouped: { group: ProjectGroup | null; items: { project: Project | null; todos: Todo[] }[] }[] = [];
+
+    // 有分组的项目
+    projectGroups.forEach(g => {
+      const items = g.projects.map(p => ({ project: p, todos: projectTodosMap[p.id] || [] }));
+      grouped.push({ group: g, items });
+    });
+
+    // 未分组的项目
+    const groupedProjectIds = new Set(projectGroups.flatMap(g => g.projects.map(p => p.id)));
+    const ungroupedProjects = projects.filter(p => !groupedProjectIds.has(p.id));
+    const ungroupedItems: { project: Project | null; todos: Todo[] }[] = [];
+    ungroupedItems.push({ project: null, todos: projectTodosMap._none });
+    ungroupedProjects.forEach(p => { ungroupedItems.push({ project: p, todos: projectTodosMap[p.id] || [] }); });
+    if (ungroupedItems.length > 0) {
+      grouped.unshift({ group: null, items: ungroupedItems });
+    }
+
+    return grouped;
   };
 
   const toggleExpanded = (key: string) => {
@@ -61,8 +93,33 @@ export default function ProjectOverview({ todos, projects, onToggle }: ProjectOv
   return (
     <section className="mb-8">
       <h2 className="text-sm font-bold text-gray-800 mb-2.5">各项目情况概览</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {projectGroups().map(group => {
+      <div className="space-y-4">
+        {getGroupedData().map((section, sIdx) => {
+          const groupId = section.group?.id || "_ungrouped";
+          const isCollapsed = collapsedGroups.has(groupId);
+          return (
+            <div key={groupId}>
+              {/* 分组头部 */}
+              <button
+                onClick={() => toggleGroupCollapse(groupId)}
+                className="flex items-center gap-2 mb-2 group"
+              >
+                <svg
+                  className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="text-xs font-semibold text-gray-600">
+                  {section.group?.name || "未分组"}
+                </span>
+             <span className="text-[10px] text-gray-400">
+                  ({section.items.reduce((acc, item) => acc + item.todos.length, 0)} 项)
+                </span>
+              </button>
+              {!isCollapsed && (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {section.items.map(group => {
           const key = group.project?.id || "_none";
           const gt = group.todos;
           const active = gt.filter(t => !t.completed);
@@ -157,6 +214,11 @@ export default function ProjectOverview({ todos, projects, onToggle }: ProjectOv
                   </>
                 )}
               </div>
+            </div>
+          );
+                })}
+              </div>
+              )}
             </div>
           );
         })}

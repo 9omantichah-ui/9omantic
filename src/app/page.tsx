@@ -117,8 +117,15 @@ export default function Home() {
   const handleCreateGroup = async (name: string) => {
     try {
       const r = await fetch("/api/project-groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
-      if (r.ok) fetchProjectGroups();
-    } catch (e) { console.error(e); }
+      if (r.ok) {
+        const newGroup = await r.json();
+        setProjectGroups(prev => [...prev, { ...newGroup, projects: newGroup.projects || [] }]);
+      } else {
+        const err = await r.text();
+        console.error("创建分组失败:", r.status, err);
+        alert(`创建分组失败 (${r.status}): ${err}`);
+      }
+    } catch (e) { console.error(e); alert("网络错误，无法创建分组"); }
   };
 
   const handleToggleGroupCollapse = async (groupId: string, collapsed: boolean) => {
@@ -162,13 +169,24 @@ export default function Home() {
     const sZ = parseInt(result.source.droppableId), dZ = parseInt(result.destination.droppableId);
     const sI = result.source.index, dI = result.destination.index;
     if (sZ === dZ && sI === dI) return;
+    // 构建与 UI 渲染一致的分组：zone 0 包含所有待办，zone 1/2/3 只包含未完成或今天完成的
     const g: Record<number, Todo[]> = { 0: [], 1: [], 2: [], 3: [] };
-    todos.forEach(t => { if (g[t.zone] !== undefined && (!t.completed || isToday(t.completedAt))) g[t.zone].push(t); });
+    const notInDrag: Todo[] = []; // 不参与拖拽的待办（zone 1/2/3 中已完成且非今天的）
+    todos.forEach(t => {
+      if (g[t.zone] === undefined) { notInDrag.push(t); return; }
+      if (t.zone === 0) {
+        g[0].push(t);
+      } else if (!t.completed || isToday(t.completedAt)) {
+        g[t.zone].push(t);
+      } else {
+        notInDrag.push(t);
+      }
+    });
     const [m] = g[sZ].splice(sI, 1); m.zone = dZ; g[dZ].splice(dI, 0, m);
-    const upd: Todo[] = [], items: { id: string; zone: number; order: number }[] = [];
+    const upd: Todo[] = [...notInDrag], items: { id: string; zone: number; order: number }[] = [];
     for (const z of [0,1,2,3]) g[z].forEach((t, i) => { upd.push({ ...t, zone: z, order: i }); items.push({ id: t.id, zone: z, order: i }); });
     setTodos(upd);
-    try { await fetch("/api/todos/reorder", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) }); }
+    try { await fetch("/api/todos/reorder", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });}
     catch (e) { console.error(e); }
   };
 
@@ -346,7 +364,7 @@ export default function Home() {
         </div>
 
         {/* ── 各项目情况概览 ── */}
-        <ProjectOverview todos={todos} projects={projects} onToggle={handleToggle} />
+        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} onToggle={handleToggle} />
       </div>
     </main>
   );
