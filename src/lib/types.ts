@@ -30,6 +30,8 @@ export interface Todo {
   scheduledDate: string | null;
   projectId: string | null;
   project: Project | null;
+  parentId: string | null;
+  subtodos?: Todo[];
   createdAt: string;
   updatedAt: string;
 }

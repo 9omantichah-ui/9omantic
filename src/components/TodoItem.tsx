@@ -14,6 +14,7 @@ interface TodoItemProps {
   onUpdate: (id: string, data: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
   onAddToPlan?: (todoId: string) => void;
+  onAddSubtodo?: (parentId: string, title: string) => void;
   dragHandleProps?: object;
 }
 
@@ -27,13 +28,25 @@ const ZONE_LABELS: Record<number, { text: string; cls: string }> = {
 const COMPLETE_MSGS = ["完成一件，秩序 +1", "漂亮，又少一件", "清爽了一点", "干得不错", "搞定！"];
 
 export default function TodoItem({
-  todo, projects, compact, showZoneBadge, hideProject, onToggle, onUpdate, onDelete, onAddToPlan,
+  todo, projects, compact, showZoneBadge, hideProject, onToggle, onUpdate, onDelete, onAddToPlan, onAddSubtodo,
 }: TodoItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
   const [bouncing, setBouncing] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [showSubInput, setShowSubInput] = useState(false);
+  const [subValue, setSubValue] = useState("");
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const subtodos = todo.subtodos || [];
+  const subDone = subtodos.filter(s => s.completed).length;
+
+  const submitSub = () => {
+    const v = subValue.trim();
+    if (!v || !onAddSubtodo) return;
+    onAddSubtodo(todo.id, v);
+    setSubValue("");
+  };
 
   if (isEditing) {
     return (
@@ -153,6 +166,18 @@ export default function TodoItem({
               </svg>
             </button>
           )}
+          {onAddSubtodo && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setShowSubInput(v => !v)}
+              className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
+              title="添加子待办"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          )}
           <button
             onMouseDown={e => e.stopPropagation()}
             onClick={() => setIsEditing(true)}
@@ -175,6 +200,59 @@ export default function TodoItem({
           </button>
         </div>
       </div>
+
+      {/* 子待办 */}
+      {(subtodos.length > 0 || showSubInput) && (
+        <div className="ml-7 mt-1 space-y-1 border-l border-gray-100 pl-3">
+          {subtodos.length > 0 && (
+            <div className="text-[11px] text-gray-400 mb-0.5">子待办 {subDone}/{subtodos.length}</div>
+          )}
+          {subtodos.map(sub => (
+            <div key={sub.id} className="group/sub flex items-center gap-2 text-sm">
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => onToggle(sub.id, !sub.completed)}
+                className={`w-3.5 h-3.5 flex-shrink-0 rounded-full border flex items-center justify-center transition-colors ${sub.completed ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"}`}
+              >
+                {sub.completed && (
+                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+              <span className={`flex-1 truncate ${sub.completed ? "line-through text-gray-400" : "text-gray-700"}`}>{sub.title}</span>
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => onDelete(sub.id)}
+                className="p-0.5 text-gray-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-opacity flex-shrink-0"
+                title="删除子待办"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+          {showSubInput && (
+            <div className="flex items-center gap-2 pt-0.5" onMouseDown={e => e.stopPropagation()}>
+              <input
+                autoFocus
+                value={subValue}
+                onChange={e => setSubValue(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") submitSub(); if (e.key === "Escape") { setShowSubInput(false); setSubValue(""); } }}
+                placeholder="添加子待办，回车确认"
+                className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-emerald-400"
+              />
+              <button
+                onClick={submitSub}
+                className="text-xs px-2 py-1 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors flex-shrink-0"
+              >
+                添加
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 完成反馈气泡 */}
       {feedback && (

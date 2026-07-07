@@ -16,6 +16,34 @@ interface ProjectOverviewProps {
   projects: Project[];
   projectGroups: ProjectGroup[];
   onToggle: (id: string, completed: boolean) => void;
+  onQuickAdd: (projectId: string | null, title: string) => void;
+}
+
+function QuickAddInput({ projectId, onQuickAdd }: { projectId: string | null; onQuickAdd: (projectId: string | null, title: string) => void }) {
+  const [value, setValue] = useState("");
+  const submit = () => {
+    const v = value.trim();
+    if (!v) return;
+    onQuickAdd(projectId, v);
+    setValue("");
+  };
+  return (
+    <div className="flex items-center gap-1.5 pt-1.5 mt-1 border-t border-gray-100">
+      <input
+        type="text"
+        value={value}
+        placeholder="+ 快速添加待办（进入未整理）"
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submit(); }}
+        className="flex-1 px-2 py-1 bg-gray-50 border border-gray-200 rounded-md text-[11px] text-gray-700 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder:text-gray-400 transition-all"
+      />
+      <button
+        onClick={submit}
+        disabled={!value.trim()}
+        className={`px-2 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${value.trim() ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.97]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+      >添加</button>
+    </div>
+  );
 }
 
 function ProgressBar({ total, done, color }: { total: number; done: number; color: string }) {
@@ -30,7 +58,7 @@ function ProgressBar({ total, done, color }: { total: number; done: number; colo
   );
 }
 
-export default function ProjectOverview({ todos, projects, projectGroups, onToggle }: ProjectOverviewProps) {
+export default function ProjectOverview({ todos, projects, projectGroups, onToggle, onQuickAdd }: ProjectOverviewProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [showCompletedMap, setShowCompletedMap] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -213,6 +241,11 @@ export default function ProjectOverview({ todos, projects, projectGroups, onTogg
                     )}
                   </>
                 )}
+              </div>
+
+              {/* 快速添加待办 */}
+              <div className="px-3.5 pb-2.5">
+                <QuickAddInput projectId={group.project?.id || null} onQuickAdd={onQuickAdd} />
               </div>
             </div>
           );
