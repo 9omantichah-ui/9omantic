@@ -196,6 +196,30 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
+  // 概览区拖拽：项目卡片排序（同组内）
+  const handleReorderProjects = async (items: { id: string; order: number; groupId: string | null }[]) => {
+    // 乐观更新：projects 顺序 + projectGroups.projects 顺序
+    const orderMap = new Map(items.map(i => [i.id, i.order]));
+    setProjects(prev => [...prev].sort((a, b) => (orderMap.get(a.id) ?? a.order) - (orderMap.get(b.id) ?? b.order)));
+    setProjectGroups(prev => prev.map(g => ({
+      ...g,
+      projects: [...g.projects].sort((a, b) => (orderMap.get(a.id) ?? a.order) - (orderMap.get(b.id) ?? b.order)),
+    })));
+    try {
+      await fetch("/api/projects", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
+    } catch (e) { console.error(e); }
+  };
+
+  // 概览区拖拽：项目卡片内待办排序
+  const handleReorderTodos = async (items: { id: string; zone: number; order: number }[]) => {
+    const orderMap = new Map(items.map(i => [i.id, i.order]));
+    setTodos(prev => prev.map(t => orderMap.has(t.id) ? { ...t, order: orderMap.get(t.id)! } : t));
+    try {
+      await fetch("/api/todos/reorder", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
+    } catch (e) { console.error(e); }
+  };
+
+
   const handleToggle = async (id: string, c: boolean) => {
     try { const r = await fetch(`/api/todos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: c }) });
       if (r.ok) { const u = await r.json(); setTodos(p => applyTodoUpdate(p, id, u)); }
@@ -419,7 +443,7 @@ export default function Home() {
         </div>
 
         {/* ── 各项目情况概览 ── */}
-        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} onToggle={handleToggle} onQuickAdd={handleQuickAdd} />
+        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onReorderProjects={handleReorderProjects} onReorderTodos={handleReorderTodos} />
       </div>
     </main>
   );
