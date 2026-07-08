@@ -12,6 +12,7 @@ interface ProjectGroupSelectorProps {
   onCreateGroup: (name: string) => void;
   onToggleGroupCollapse: (groupId: string, collapsed: boolean) => void;
   onMoveProject: (projectId: string, groupId: string | null) => void;
+  onDeleteProject: (projectId: string) => void;
 }
 
 export default function ProjectGroupSelector({
@@ -23,6 +24,7 @@ export default function ProjectGroupSelector({
   onCreateGroup,
   onToggleGroupCollapse,
   onMoveProject,
+  onDeleteProject,
 }: ProjectGroupSelectorProps) {
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showGroupForm, setShowGroupForm] = useState(false);
@@ -46,6 +48,13 @@ export default function ProjectGroupSelector({
     onCreateGroup(newGroupName.trim());
     setNewGroupName("");
     setShowGroupForm(false);
+  };
+
+  const handleDeleteProject = (p: Project) => {
+    if (window.confirm(`确定删除项目「${p.name}」吗？该项目下的所有待办将一并删除，此操作不可恢复。`)) {
+      onDeleteProject(p.id);
+      setMoveMenuId(null);
+    }
   };
 
   return (
@@ -73,18 +82,16 @@ export default function ProjectGroupSelector({
             >
               {p.name}
             </button>
-            {projectGroups.length > 0 && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setMoveMenuId(moveMenuId === p.id ? null : p.id); }}
-                className="ml-0.5 w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 hover:bg-gray-300 flex items-center justify-center text-[8px]"
-                title="移动到分组"
-              >
-                ↗
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setMoveMenuId(moveMenuId === p.id ? null : p.id); }}
+              className="ml-0.5 w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 hover:bg-gray-300 flex items-center justify-center text-[8px]"
+              title="更多操作"
+            >
+              ⋯
+            </button>
             {moveMenuId === p.id && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[80px]">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[90px]">
                 {projectGroups.map(g => (
                   <button
                     key={g.id}
@@ -95,6 +102,13 @@ export default function ProjectGroupSelector({
                     → {g.name}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteProject(p)}
+                  className="block w-full px-2.5 py-1 text-[10px] text-left text-red-500 hover:bg-red-50 border-t border-gray-100 mt-0.5 pt-1"
+                >
+                  🗑 删除项目
+                </button>
               </div>
             )}
           </span>
@@ -140,8 +154,8 @@ export default function ProjectGroupSelector({
                   >
                     ↗
                   </button>
-                  {moveMenuId === p.id && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[80px]">
+               {moveMenuId === p.id && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[90px]">
                       <button
                         type="button"
                         onClick={() => { onMoveProject(p.id, null); setMoveMenuId(null); }}
@@ -159,6 +173,14 @@ export default function ProjectGroupSelector({
                           → {g.name}
                         </button>
                       ))}
+                      <div className="my-1 border-t border-gray-100" />
+                      <button
+                        type="button"
+                        onClick={() => { handleDeleteProject(p); setMoveMenuId(null); }}
+                        className="block w-full px-2.5 py-1 text-[10px] text-left text-red-500 hover:bg-red-50"
+                      >
+                        🗑 删除项目
+                      </button>
                     </div>
                   )}
                 </span>

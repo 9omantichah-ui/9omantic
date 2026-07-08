@@ -196,6 +196,16 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
+  const handleDeleteProject = async (projectId: string) => {
+    // 乐观更新：移除项目、清理该项目下的待办
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+    setProjectGroups(prev => prev.map(g => ({ ...g, projects: g.projects.filter(p => p.id !== projectId) })));
+    setTodos(prev => prev.filter(t => t.projectId !== projectId));
+    try {
+      await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+    } catch (e) { console.error(e); }
+  };
+
   // 概览区拖拽：项目卡片排序（同组内）
   const handleReorderProjects = async (items: { id: string; order: number; groupId: string | null }[]) => {
     // 乐观更新：projects 顺序 + projectGroups.projects 顺序
@@ -324,6 +334,7 @@ export default function Home() {
                 onCreateGroup={handleCreateGroup}
                 onToggleGroupCollapse={handleToggleGroupCollapse}
                 onMoveProject={handleMoveProject}
+                onDeleteProject={handleDeleteProject}
               />
             </div>
             <div className="mt-2 flex items-center">
