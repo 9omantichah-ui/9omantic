@@ -31,7 +31,7 @@ export const PUT = withAuthParams(async (request: NextRequest, userId: string, p
   const encFields: Record<string, string> = { title: "title", description: "description" };
   const plainFields: Record<string, string> = {
     completed: "completed", priority: "priority", projectId: "projectId",
-    zone: "zone", order: '"order"', scheduledDate: "scheduledDate",
+    zone: "zone", order: '"order"', scheduledDate: "scheduledDate", taskId: "taskId",
   };
 
   for (const [key, col] of Object.entries(encFields)) {

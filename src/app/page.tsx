@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { Todo, Project, ProjectGroup } from "@/lib/types";
+import { Todo, Project, ProjectGroup, Task } from "@/lib/types";
 import TodoItem from "@/components/TodoItem";
 import AuthForm from "@/components/AuthForm";
 import ProjectGroupSelector from "@/components/ProjectGroupSelector";
@@ -52,6 +52,7 @@ export default function Home() {
   const [authChecked, setAuthChecked] = useState(false);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [createProjectId, setCreateProjectId] = useState("");
@@ -103,6 +104,21 @@ export default function Home() {
     try { const data = await (await fetch("/api/projects")).json(); if (Array.isArray(data)) setProjects(data); } catch (e) { console.error(e); }
   };
 
+  const fetchTasks = async () => {
+    try { const data = await (await fetch("/api/tasks")).json(); if (Array.isArray(data)) setTasks(data); } catch (e) { console.error(e); }
+  };
+
+  // 新建任务，成功后加入本地状态并返回新任务
+  const handleCreateTask = async (projectId: string | null, name: string): Promise<Task | null> => {
+    try {
+      const r = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, projectId }) });
+      if (!r.ok) return null;
+      const t = await r.json();
+      setTasks(p => [...p, t]);
+      return t;
+    } catch (e) { console.error(e); return null; }
+  };
+
   const fetchProjectGroups = async () => {
     try {
       const data = await (await fetch("/api/project-groups")).json();
@@ -110,7 +126,7 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
-  useEffect(() => { if (user) { fetchProjects(); fetchProjectGroups(); } }, [user]);
+  useEffect(() => { if (user) { fetchProjects(); fetchProjectGroups(); fetchTasks(); } }, [user]);
   useEffect(() => { if (user) fetchTodos(); }, [fetchTodos, user]);
 
   const handleCreate = async () => {
@@ -137,11 +153,12 @@ export default function Home() {
   };
 
   // 概览区快速添加待办（默认进入未整理区 zone=0）
-  const handleQuickAdd = async (projectId: string | null, title: string) => {
+  const handleQuickAdd = async (projectId: string | null, title: string, taskId?: string | null) => {
     if (!title.trim()) return;
     try {
       const body: Record<string, unknown> = { title: title.trim(), zone: 0 };
       if (projectId) body.projectId = projectId;
+      if (taskId) body.taskId = taskId;
       const r = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (r.ok) {
         const n = await r.json();
@@ -239,16 +256,6 @@ export default function Home() {
       await fetch("/api/projects", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
     } catch (e) { console.error(e); }
   };
-
-  // 概览区拖拽：项目卡片内待办排序
-  const handleReorderTodos = async (items: { id: string; zone: number; order: number }[]) => {
-    const orderMap = new Map(items.map(i => [i.id, i.order]));
-    setTodos(prev => prev.map(t => orderMap.has(t.id) ? { ...t, order: orderMap.get(t.id)! } : t));
-    try {
-      await fetch("/api/todos/reorder", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
-    } catch (e) { console.error(e); }
-  };
-
 
   const handleToggle = async (id: string, c: boolean) => {
     try { const r = await fetch(`/api/todos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: c }) });
@@ -474,7 +481,7 @@ export default function Home() {
         </div>
 
         {/* ── 各项目情况概览 ── */}
-        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onReorderProjects={handleReorderProjects} onReorderTodos={handleReorderTodos} />
+        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} tasks={tasks} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onCreateTask={handleCreateTask} onReorderProjects={handleReorderProjects} />
       </div>
     </main>
   );

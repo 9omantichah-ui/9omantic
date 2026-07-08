@@ -18,6 +18,17 @@ export interface Project {
   _count?: { todos: number };
 }
 
+export interface Task {
+  id: string;
+  name: string;
+  projectId: string | null;
+  order: number;
+  userId: string;
+  createdAt: string;
+  todos?: Todo[];
+  _count?: { todos: number; completed: number };
+}
+
 export interface Todo {
   id: string;
   title: string;
@@ -30,7 +41,8 @@ export interface Todo {
   scheduledDate: string | null;
   projectId: string | null;
   project: Project | null;
-  parentId: string | null;
+  taskId: string | null;
+  parentId: string | null; // 已废弃，保留字段
   subtodos?: Todo[];
   createdAt: string;
   updatedAt: string;

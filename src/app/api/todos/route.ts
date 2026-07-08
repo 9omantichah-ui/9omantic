@@ -11,6 +11,7 @@ function toTodo(t: Record<string, unknown>): TodoDTO {
     completed: Boolean(t.completed),
     completedAt: t.completedAt || null,
     parentId: t.parentId || null,
+    taskId: t.taskId || null,
     title: dec(t.title),
     description: dec(t.description),
     project: t.p_id ? { id: t.p_id, name: dec(t.p_name), color: t.p_color } : null,
@@ -37,7 +38,7 @@ export const GET = withAuth(async (_request: NextRequest, userId: string) => {
 });
 
 export const POST = withAuth(async (request: NextRequest, userId: string) => {
-  const { title, description, priority, projectId, zone, scheduledDate, parentId } = await request.json();
+  const { title, description, priority, projectId, zone, scheduledDate, parentId, taskId } = await request.json();
   if (!title?.trim()) {
     return NextResponse.json({ error: "标题不能为空" }, { status: 400 });
   }
@@ -55,8 +56,8 @@ export const POST = withAuth(async (request: NextRequest, userId: string) => {
   const encDesc = description?.trim() ? encrypt(description.trim()) : null;
 
   await execute(
-    'INSERT INTO Todo (id, title, description, completed, priority, zone, "order", scheduledDate, projectId, parentId, createdAt, updatedAt, userId) VALUES (?,?,?,0,?,?,?,?,?,?,?,?,?)',
-    [id, encTitle, encDesc, priority || "medium", targetZone, maxOrd + 1, scheduledDate || null, projectId || null, parentId || null, now, now, userId]
+    'INSERT INTO Todo (id, title, description, completed, priority, zone, "order", scheduledDate, projectId, parentId, taskId, createdAt, updatedAt, userId) VALUES (?,?,?,0,?,?,?,?,?,?,?,?,?,?)',
+    [id, encTitle, encDesc, priority || "medium", targetZone, maxOrd + 1, scheduledDate || null, projectId || null, parentId || null, taskId || null, now, now, userId]
   );
 
   const todos = await queryAll(
