@@ -68,7 +68,27 @@ export default function Home() {
     }).catch(() => setAuthChecked(true));
   }, []);
 
-  // 保活轮询已移除 — 使用外部 UptimeRobot 替代
+  // 保活轮询：页面打开后每隔一段随机时间(约5~15分钟，非等差)ping /api/health，
+  // 防止 Render 免费实例休眠。使用递归 setTimeout 让每次间隔独立随机。
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const nextDelay = () => {
+      // 5~15 分钟之间随机(毫秒)，间隔非等差
+      const min = 5 * 60 * 1000;
+      const max = 15 * 60 * 1000;
+      return Math.floor(min + Math.random() * (max - min));
+    };
+
+    const ping = async () => {
+      try { await fetch("/api/health", { cache: "no-store" }); } catch { /* 忽略保活失败 */ }
+      if (!cancelled) timer = setTimeout(ping, nextDelay());
+    };
+
+    timer = setTimeout(ping, nextDelay());
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, []);
 
   const fetchTodos = useCallback(async () => {
     if (!user) return;
