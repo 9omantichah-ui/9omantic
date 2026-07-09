@@ -62,8 +62,7 @@ function ProgressBar({ total, done, color }: { total: number; done: number; colo
   );
 }
 
-export default function ProjectOverview({ todos, projects, projectGroups, tasks, onToggle, onQuickAdd, onCreateTask, onReorderProjects }: ProjectOverviewProps) {
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+export default function ProjectOverview({ todos, projects, tasks, onToggle, onQuickAdd, onCreateTask, onReorderProjects }: ProjectOverviewProps) {
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const [addingTaskFor, setAddingTaskFor] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState("");
@@ -76,104 +75,65 @@ export default function ProjectOverview({ todos, projects, projectGroups, tasks,
     });
   };
 
-  const toggleGroupCollapse = (groupId: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      next.has(groupId) ? next.delete(groupId) : next.add(groupId);
-      return next;
-    });
-  };
-
-  // 按 ProjectGroup 聚合项目
-  const getGroupedData = () => {
+  // 扁平聚合：所有项目平铺（不再按 ProjectGroup 分组），另加一个"未分类"占位承载无项目的散待办
+  const getProjectItems = () => {
     const projectTodosMap: Record<string, Todo[]> = { _none: [] };
     projects.forEach(p => { projectTodosMap[p.id] = []; });
     todos.forEach(t => { const k = t.projectId || "_none"; if (projectTodosMap[k]) projectTodosMap[k].push(t); else projectTodosMap._none.push(t); });
 
-    const grouped: { group: ProjectGroup | null; items: { project: Project | null; todos: Todo[] }[] }[] = [];
-
-    projectGroups.forEach(g => {
-      const items = g.projects.map(p => ({ project: p, todos: projectTodosMap[p.id] || [] }));
-      grouped.push({ group: g, items });
+    const items: { project: Project | null; todos: Todo[] }[] = [];
+    // 按项目原有 order 平铺全部项目
+    [...projects].sort((a, b) => a.order - b.order).forEach(p => {
+      items.push({ project: p, todos: projectTodosMap[p.id] || [] });
     });
-
-    const groupedProjectIds = new Set(projectGroups.flatMap(g => g.projects.map(p => p.id)));
-    const ungroupedProjects = projects.filter(p => !groupedProjectIds.has(p.id));
-    const ungroupedItems: { project: Project | null; todos: Todo[] }[] = [];
-    ungroupedItems.push({ project: null, todos: projectTodosMap._none });
-    ungroupedProjects.forEach(p => { ungroupedItems.push({ project: p, todos: projectTodosMap[p.id] || [] }); });
-    if (ungroupedItems.length > 0) {
-      grouped.unshift({ group: null, items: ungroupedItems });
+    // 无项目归属的散待办 → "未分类" 占位卡片（置于末尾）
+    if (projectTodosMap._none.length > 0) {
+      items.push({ project: null, todos: projectTodosMap._none });
     }
-
-    return grouped;
+    return items;
   };
 
-  const grouped = getGroupedData();
+  const projectItems = getProjectItems();
 
-  // 统一拖拽处理：区分项目卡片拖拽与待办拖拽
+  // 拖拽处理：全局单一列表内重排项目卡片（保持各自原 groupId 不变）
   const handleDragEnd = (result: DropResult) => {
     const { source, destination, type } = result;
     if (!destination) return;
 
     if (type === "PROJECT") {
-      // 项目卡片同分组内重排（droppableId = group-<groupId>）
-      if (source.droppableId !== destination.droppableId) return;
       if (source.index === destination.index) return;
-      const groupId = source.droppableId.replace(/^group-/, "");
-      const section = grouped.find(s => (s.group?.id || "_ungrouped") === groupId);
-      if (!section) return;
-      // 仅取有 project 的卡片参与排序（排除 "未分类" _none 占位）
-      const draggableItems = section.items.filter(it => it.project);
+      // 仅有 project 的卡片参与排序（排除 "未分类" _none 占位）
+      const draggableItems = projectItems.filter(it => it.project);
       const reordered = [...draggableItems];
       const [moved] = reordered.splice(source.index, 1);
       reordered.splice(destination.index, 0, moved);
-      const gid = section.group?.id ?? null;
-      const items = reordered.map((it, idx) => ({ id: it.project!.id, order: idx, groupId: gid }));
+      const items = reordered.map((it, idx) => ({ id: it.project!.id, order: idx, groupId: it.project!.groupId }));
       onReorderProjects(items);
       return;
     }
   };
 
+  const totalTodos = projectItems.reduce((acc, item) => acc + item.todos.length, 0);
+
   return (
     <section className="mb-8">
-      <h2 className="text-sm font-bold text-gray-800 mb-2.5">各项目情况概览</h2>
+      <div className="flex items-center gap-2 mb-2.5">
+        <h2 className="text-sm font-bold text-gray-800">各项目情况概览</h2>
+        <span className="text-[10px] text-gray-400">({projects.length} 个项目 · {totalTodos} 项待办)</span>
+      </div>
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="space-y-4">
-          {grouped.map((section) => {
-            const groupId = section.group?.id || "_ungrouped";
-            const isCollapsed = collapsedGroups.has(groupId);
-            // 计算每个可拖拽项目卡片在 draggable 列表中的索引
-            let projectDragIndex = -1;
-            return (
-              <div key={groupId}>
-                {/* 分组头部 */}
-                <button
-                  onClick={() => toggleGroupCollapse(groupId)}
-                  className="flex items-center gap-2 mb-2 group"
+        {(() => {
+          // 计算每个可拖拽项目卡片在 draggable 列表中的索引
+          let projectDragIndex = -1;
+          return (
+            <Droppable droppableId="all-projects" type="PROJECT" direction="horizontal">
+              {(dropProvided) => (
+                <div
+                  ref={dropProvided.innerRef}
+                  {...dropProvided.droppableProps}
+                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
                 >
-                  <svg
-                    className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                  <span className="text-xs font-semibold text-gray-600">
-                    {section.group?.name || "未分组"}
-                  </span>
-                  <span className="text-[10px] text-gray-400">
-                    ({section.items.reduce((acc, item) => acc + item.todos.length, 0)} 项)
-                  </span>
-                </button>
-                {!isCollapsed && (
-                  <Droppable droppableId={`group-${groupId}`} type="PROJECT" direction="horizontal">
-                    {(dropProvided) => (
-                      <div
-                        ref={dropProvided.innerRef}
-                        {...dropProvided.droppableProps}
-                        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
-                      >
-                        {section.items.map(group => {
+                  {projectItems.map(group => {
                           const key = group.project?.id || "_none";
                           const gt = group.todos;
                           const active = gt.filter(t => !t.completed);
@@ -334,16 +294,13 @@ export default function ProjectOverview({ todos, projects, projectGroups, tasks,
                               )}
                             </Draggable>
                           );
-                        })}
-                        {dropProvided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  })}
+                  {dropProvided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          );
+        })()}
       </DragDropContext>
     </section>
   );
