@@ -126,12 +126,12 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
           // 计算每个可拖拽项目卡片在 draggable 列表中的索引
           let projectDragIndex = -1;
           return (
-            <Droppable droppableId="all-projects" type="PROJECT" direction="horizontal">
+            <Droppable droppableId="all-projects" type="PROJECT">
               {(dropProvided) => (
                 <div
                   ref={dropProvided.innerRef}
                   {...dropProvided.droppableProps}
-                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+                  className="flex flex-wrap items-start gap-3"
                 >
                   {projectItems.map(group => {
                           const key = group.project?.id || "_none";
@@ -148,7 +148,7 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
                           const cardInner = (dragHandleProps?: Record<string, unknown>, isDragging?: boolean) => (
                             <div className={`bg-white/90 rounded-xl border shadow-sm overflow-hidden flex flex-col ${isDragging ? "border-blue-300 shadow-md" : "border-gray-200/80"}`}>
                               {/* 项目头（拖拽把手） */}
-                              <div className="px-3.5 py-2.5 border-b border-gray-100" {...(dragHandleProps || {})}>
+                              <div className={`px-3.5 py-2.5 border-b border-gray-100 select-none ${isDraggableProject ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`} {...(dragHandleProps || {})}>
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: pc }} />
                                   <span className="text-xs font-semibold text-gray-700">{group.project?.name || "未分类"}</span>
@@ -282,20 +282,25 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
                           );
 
                           if (!isDraggableProject) {
-                            return <div key={key}>{cardInner()}</div>;
+                            return <div key={key} className="w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)]">{cardInner()}</div>;
                           }
 
                           return (
                             <Draggable key={key} draggableId={`project-${key}`} index={dragIndex}>
                               {(dp, snap) => (
-                                <div ref={dp.innerRef} {...dp.draggableProps}>
+                                <div
+                                  ref={dp.innerRef}
+                                  {...dp.draggableProps}
+                                  className={snap.isDragging ? "w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)] z-50" : "w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)]"}
+                                >
                                   {cardInner(dp.dragHandleProps as unknown as Record<string, unknown>, snap.isDragging)}
                                 </div>
                               )}
                             </Draggable>
                           );
                   })}
-                  {dropProvided.placeholder}
+                  {/* flex-wrap 布局下隐藏 placeholder，避免拖拽时占位挤动其他卡片 */}
+                  <span style={{ display: "none" }}>{dropProvided.placeholder}</span>
                 </div>
               )}
             </Droppable>
