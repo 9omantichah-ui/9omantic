@@ -16,10 +16,12 @@ export const GET = withAuth(async (request: NextRequest, userId: string) => {
   const items = await queryAll(`
     SELECT di.*, t.title as t_title, t.description as t_desc, t.completed as t_completed,
            t.zone as t_zone, t.projectId as t_projectId,
-           p.id as p_id, p.name as p_name, p.color as p_color
+           p.id as p_id, p.name as p_name, p.color as p_color,
+           tk.id as tk_id, tk.name as tk_name
     FROM DailyPlanItem di
     LEFT JOIN Todo t ON di.todoId = t.id
     LEFT JOIN Project p ON t.projectId = p.id
+    LEFT JOIN Task tk ON t.taskId = tk.id
     WHERE di.planId = ? AND di.userId = ?
     ORDER BY di."order" ASC
   `, [plan!.id, userId]);
@@ -41,6 +43,7 @@ export const GET = withAuth(async (request: NextRequest, userId: string) => {
       zone: item.t_zone,
       projectId: item.t_projectId,
       project: item.p_id ? { id: item.p_id, name: dec(item.p_name), color: item.p_color } : null,
+      task: item.tk_id ? { id: item.tk_id, name: dec(item.tk_name) } : null,
     } : null,
   }));
 

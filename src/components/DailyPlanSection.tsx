@@ -75,6 +75,14 @@ export default function DailyPlanSection({
                     {todo.project.name}
                   </span>
                 )}
+                {todo?.task && (
+                  <span
+                    className="px-1.5 py-[1px] rounded text-[9px] font-medium"
+                    style={{ backgroundColor: `${todo.project?.color || "#94a3b8"}22`, color: todo.project?.color || "#64748b" }}
+                  >
+                    {todo.task.name}
+                  </span>
+                )}
                 {todo && <span className="text-[9px] px-1 py-[0.5px] rounded bg-gray-100 text-gray-400">{ZONE_NAME[todo.zone]}</span>}
               </div>
             </div>

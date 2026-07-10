@@ -123,6 +123,14 @@ export default function TodoItem({
                 {todo.project.name}
               </span>
             )}
+            {!hideProject && todo.task && (
+              <span
+                className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[10px] font-medium"
+                style={{ backgroundColor: `${todo.project?.color || "#94a3b8"}22`, color: todo.project?.color || "#64748b" }}
+              >
+                {todo.task.name}
+              </span>
+            )}
             {!hideProject && !todo.project && !compact && (
               <span className="px-1.5 py-[1px] rounded text-[10px] font-medium bg-gray-100 text-gray-400">未分类</span>
             )}

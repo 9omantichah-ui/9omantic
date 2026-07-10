@@ -35,6 +35,46 @@ interface ProjectOverviewProps {
   onQuickAdd: (projectId: string | null, title: string, taskId?: string | null) => void;
   onCreateTask: (projectId: string | null, name: string) => Promise<Task | null>;
   onReorderProjects: (items: { id: string; order: number; groupId: string | null }[]) => void;
+  onUpdateProjectColor: (projectId: string, color: string) => void;
+}
+
+// 预设颜色板
+const PRESET_COLORS = [
+  "#6366f1", "#3b82f6", "#0ea5e9", "#06b6d4", "#10b981",
+  "#22c55e", "#eab308", "#f59e0b", "#f97316", "#ef4444",
+  "#ec4899", "#a855f7", "#8b5cf6", "#64748b", "#78716c",
+];
+
+function ColorPicker({ color, onPick }: { color: string; onPick: (c: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const stop = (e: React.SyntheticEvent) => { e.stopPropagation(); e.preventDefault(); };
+  return (
+    <span className="relative flex-shrink-0" onMouseDown={stop} onPointerDown={stop} onClick={stop}>
+      <button
+        type="button"
+        onClick={(e) => { stop(e); setOpen(o => !o); }}
+        className="w-2.5 h-2.5 rounded-full block ring-offset-1 hover:ring-2 hover:ring-gray-300 transition"
+        style={{ backgroundColor: color }}
+        title="点击调整颜色"
+      />
+      {open && (
+        <>
+          <span className="fixed inset-0 z-10" onClick={(e) => { stop(e); setOpen(false); }} />
+          <span className="absolute left-0 top-4 z-20 grid grid-cols-5 gap-1.5 p-2 bg-white rounded-lg shadow-lg border border-gray-200">
+            {PRESET_COLORS.map(c => (
+              <button
+                key={c}
+                type="button"
+                onClick={(e) => { stop(e); onPick(c); setOpen(false); }}
+                className={`w-4 h-4 rounded-full transition hover:scale-110 ${c === color ? "ring-2 ring-offset-1 ring-gray-400" : ""}`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </span>
+        </>
+      )}
+    </span>
+  );
 }
 
 function QuickAddInput({ projectId, taskId, onQuickAdd }: { projectId: string | null; taskId?: string | null; onQuickAdd: (projectId: string | null, title: string, taskId?: string | null) => void }) {
@@ -93,7 +133,7 @@ function SortableCard({ id, children }: { id: string; children: (dragHandleProps
   );
 }
 
-export default function ProjectOverview({ todos, projects, tasks, onToggle, onQuickAdd, onCreateTask, onReorderProjects }: ProjectOverviewProps) {
+export default function ProjectOverview({ todos, projects, tasks, onToggle, onQuickAdd, onCreateTask, onReorderProjects, onUpdateProjectColor }: ProjectOverviewProps) {
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const [addingTaskFor, setAddingTaskFor] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState("");
@@ -113,11 +153,18 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
     todos.forEach(t => { const k = t.projectId || "_none"; if (projectTodosMap[k]) projectTodosMap[k].push(t); else projectTodosMap._none.push(t); });
 
     const items: { project: Project | null; todos: Todo[] }[] = [];
-    // 按项目原有 order 平铺全部项目
-    [...projects].sort((a, b) => a.order - b.order).forEach(p => {
-      items.push({ project: p, todos: projectTodosMap[p.id] || [] });
+    // 平铺全部项目：未完成项目在前，"全部待办已完成"的项目排到最下方
+    const sortedProjects = [...projects].sort((a, b) => a.order - b.order);
+    const activeProjects: Project[] = [];
+    const doneProjects: Project[] = [];
+    sortedProjects.forEach(p => {
+      const pt = projectTodosMap[p.id] || [];
+      const isAllDone = pt.length > 0 && pt.every(t => t.completed);
+      (isAllDone ? doneProjects : activeProjects).push(p);
     });
-    // 无项目归属的散待办 → "未分类" 占位卡片（置于末尾）
+    activeProjects.forEach(p => items.push({ project: p, todos: projectTodosMap[p.id] || [] }));
+    doneProjects.forEach(p => items.push({ project: p, todos: projectTodosMap[p.id] || [] }));
+    // 无项目归属的散待办 → "未分类" 占位卡片（置于最末尾）
     if (projectTodosMap._none.length > 0) {
       items.push({ project: null, todos: projectTodosMap._none });
     }
@@ -172,7 +219,9 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
                               {/* 项目头（拖拽把手） */}
                               <div className={`px-3.5 py-2.5 border-b border-gray-100 select-none ${isDraggableProject ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`} {...(dragHandleProps || {})}>
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: pc }} />
+                                  {group.project?.id
+                                    ? <ColorPicker color={pc} onPick={(c) => onUpdateProjectColor(group.project!.id, c)} />
+                                    : <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: pc }} />}
                                   <span className="text-xs font-semibold text-gray-700">{group.project?.name || "未分类"}</span>
                                   {isDraggableProject && (
                                     <svg className="w-3 h-3 text-gray-300 cursor-grab" fill="currentColor" viewBox="0 0 20 20">

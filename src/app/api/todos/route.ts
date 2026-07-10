@@ -15,13 +15,17 @@ function toTodo(t: Record<string, unknown>): TodoDTO {
     title: dec(t.title),
     description: dec(t.description),
     project: t.p_id ? { id: t.p_id, name: dec(t.p_name), color: t.p_color } : null,
+    task: t.tk_id ? { id: t.tk_id, name: dec(t.tk_name) } : null,
   };
 }
 
 export const GET = withAuth(async (_request: NextRequest, userId: string) => {
   const rows = await queryAll(`
-    SELECT t.*, p.id as p_id, p.name as p_name, p.color as p_color
-    FROM Todo t LEFT JOIN Project p ON t.projectId = p.id
+    SELECT t.*, p.id as p_id, p.name as p_name, p.color as p_color,
+           tk.id as tk_id, tk.name as tk_name
+    FROM Todo t
+    LEFT JOIN Project p ON t.projectId = p.id
+    LEFT JOIN Task tk ON t.taskId = tk.id
     WHERE t.userId = ?
     ORDER BY t.zone ASC, t."order" ASC, t.createdAt DESC
   `, [userId]);

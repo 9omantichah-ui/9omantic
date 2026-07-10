@@ -42,6 +42,7 @@ export interface Todo {
   projectId: string | null;
   project: Project | null;
   taskId: string | null;
+  task?: { id: string; name: string } | null;
   parentId: string | null; // 已废弃，保留字段
   subtodos?: Todo[];
   createdAt: string;

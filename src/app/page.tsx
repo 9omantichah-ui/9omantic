@@ -263,6 +263,15 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
+  // 更新项目颜色
+  const handleUpdateProjectColor = async (projectId: string, color: string) => {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, color } : p));
+    setProjectGroups(prev => prev.map(g => ({ ...g, projects: g.projects.map(p => p.id === projectId ? { ...p, color } : p) })));
+    try {
+      await fetch(`/api/projects/${projectId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ color }) });
+    } catch (e) { console.error(e); }
+  };
+
   const handleToggle = async (id: string, c: boolean) => {
     try { const r = await fetch(`/api/todos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: c }) });
       if (r.ok) { const u = await r.json(); setTodos(p => applyTodoUpdate(p, id, u)); }
@@ -554,7 +563,7 @@ export default function Home() {
         </DragDropContext>
 
         {/* ── 各项目情况概览 ── */}
-        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} tasks={tasks} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onCreateTask={handleCreateTask} onReorderProjects={handleReorderProjects} />
+        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} tasks={tasks} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onCreateTask={handleCreateTask} onReorderProjects={handleReorderProjects} onUpdateProjectColor={handleUpdateProjectColor} />
       </div>
     </main>
   );
