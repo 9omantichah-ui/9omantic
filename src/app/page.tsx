@@ -247,10 +247,14 @@ export default function Home() {
   const handleReorderProjects = async (items: { id: string; order: number; groupId: string | null }[]) => {
     // 乐观更新：projects 顺序 + projectGroups.projects 顺序
     const orderMap = new Map(items.map(i => [i.id, i.order]));
-    setProjects(prev => [...prev].sort((a, b) => (orderMap.get(a.id) ?? a.order) - (orderMap.get(b.id) ?? b.order)));
+    setProjects(prev => [...prev]
+      .map(p => orderMap.has(p.id) ? { ...p, order: orderMap.get(p.id)! } : p)
+      .sort((a, b) => a.order - b.order));
     setProjectGroups(prev => prev.map(g => ({
       ...g,
-      projects: [...g.projects].sort((a, b) => (orderMap.get(a.id) ?? a.order) - (orderMap.get(b.id) ?? b.order)),
+      projects: [...g.projects]
+        .map(p => orderMap.has(p.id) ? { ...p, order: orderMap.get(p.id)! } : p)
+        .sort((a, b) => a.order - b.order),
     })));
     try {
       await fetch("/api/projects", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
