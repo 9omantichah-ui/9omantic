@@ -1,7 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Todo, Project, ProjectGroup, Task } from "@/lib/types";
 
 const ZONE_NAME: Record<number, string> = { 0: "未整理", 1: "优先做", 2: "稍后做", 3: "晚点做" };
@@ -62,6 +76,23 @@ function ProgressBar({ total, done, color }: { total: number; done: number; colo
   );
 }
 
+// 可排序的项目卡片包裹：iPhone 桌面式网格拖拽（拖到哪其他卡片自动补位）
+function SortableCard({ id, children }: { id: string; children: (dragHandleProps: Record<string, unknown>, isDragging: boolean) => React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  };
+  const dragHandleProps = { ...attributes, ...listeners } as Record<string, unknown>;
+  return (
+    <div ref={setNodeRef} style={style} className="w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)] h-[480px]">
+      {children(dragHandleProps, isDragging)}
+    </div>
+  );
+}
+
 export default function ProjectOverview({ todos, projects, tasks, onToggle, onQuickAdd, onCreateTask, onReorderProjects }: ProjectOverviewProps) {
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const [addingTaskFor, setAddingTaskFor] = useState<string | null>(null);
@@ -95,22 +126,24 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
 
   const projectItems = getProjectItems();
 
-  // 拖拽处理：全局单一列表内重排项目卡片（保持各自原 groupId 不变）
-  const handleDragEnd = (result: DropResult) => {
-    const { source, destination, type } = result;
-    if (!destination) return;
+  // 参与拖拽排序的项目 id（排除 "未分类" _none 占位）
+  const sortableIds = projectItems.filter(it => it.project).map(it => it.project!.id);
 
-    if (type === "PROJECT") {
-      if (source.index === destination.index) return;
-      // 仅有 project 的卡片参与排序（排除 "未分类" _none 占位）
-      const draggableItems = projectItems.filter(it => it.project);
-      const reordered = [...draggableItems];
-      const [moved] = reordered.splice(source.index, 1);
-      reordered.splice(destination.index, 0, moved);
-      const items = reordered.map((it, idx) => ({ id: it.project!.id, order: idx, groupId: it.project!.groupId }));
-      onReorderProjects(items);
-      return;
-    }
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  // 拖拽结束：iPhone 桌面式重排，其余卡片自动补位
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = sortableIds.indexOf(active.id as string);
+    const newIndex = sortableIds.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(sortableIds, oldIndex, newIndex);
+    const groupMap = new Map(projects.map(p => [p.id, p.groupId]));
+    const items = reordered.map((pid, idx) => ({ id: pid, order: idx, groupId: groupMap.get(pid) ?? null }));
+    onReorderProjects(items);
   };
 
   const totalTodos = projectItems.reduce((acc, item) => acc + item.todos.length, 0);
@@ -121,18 +154,9 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
         <h2 className="text-sm font-bold text-gray-800">各项目情况概览</h2>
         <span className="text-[10px] text-gray-400">({projects.length} 个项目 · {totalTodos} 项待办)</span>
       </div>
-      <DragDropContext onDragEnd={handleDragEnd}>
-        {(() => {
-          // 计算每个可拖拽项目卡片在 draggable 列表中的索引
-          let projectDragIndex = -1;
-          return (
-            <Droppable droppableId="all-projects" type="PROJECT">
-              {(dropProvided) => (
-                <div
-                  ref={dropProvided.innerRef}
-                  {...dropProvided.droppableProps}
-                  className="flex flex-wrap items-start gap-3"
-                >
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
+          <div className="flex flex-wrap items-start gap-3">
                   {projectItems.map(group => {
                           const key = group.project?.id || "_none";
                           const gt = group.todos;
@@ -142,8 +166,6 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
                           const doneCount = done.length;
                           const pc = group.project?.color || "#94a3b8";
                           const isDraggableProject = !!group.project;
-                          if (isDraggableProject) projectDragIndex += 1;
-                          const dragIndex = projectDragIndex;
 
                           const cardInner = (dragHandleProps?: Record<string, unknown>, isDragging?: boolean) => (
                             <div className={`bg-white/90 rounded-xl border shadow-sm overflow-hidden flex flex-col h-[480px] ${isDragging ? "border-blue-300 shadow-lg" : "border-gray-200/80"}`}>
@@ -283,30 +305,17 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
 
                           if (!isDraggableProject) {
                             return <div key={key} className="w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)] h-[480px]">{cardInner()}</div>;
-                      }
+                          }
 
                           return (
-                            <Draggable key={key} draggableId={`project-${key}`} index={dragIndex}>
-                              {(dp, snap) => (
-                                <div
-                                  ref={dp.innerRef}
-                                  {...dp.draggableProps}
-                                  className={`w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)] h-[480px] ${snap.isDragging ? "z-50" : ""}`}
-                                >
-                                  {cardInner(dp.dragHandleProps as unknown as Record<string, unknown>, snap.isDragging)}
-                                </div>
-                              )}
-                            </Draggable>
+                            <SortableCard key={key} id={key}>
+                              {(dhp, dragging) => cardInner(dhp, dragging)}
+                            </SortableCard>
                           );
                   })}
-                  {/* flex-wrap 布局下隐藏 placeholder，避免拖拽时占位挤动其他卡片 */}
-                  <span style={{ display: "none" }}>{dropProvided.placeholder}</span>
-                </div>
-              )}
-            </Droppable>
-          );
-        })()}
-      </DragDropContext>
+          </div>
+        </SortableContext>
+      </DndContext>
     </section>
   );
 }
