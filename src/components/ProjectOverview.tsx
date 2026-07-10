@@ -146,7 +146,7 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
                           const dragIndex = projectDragIndex;
 
                           const cardInner = (dragHandleProps?: Record<string, unknown>, isDragging?: boolean) => (
-                            <div className={`bg-white/90 rounded-xl border shadow-sm overflow-hidden flex flex-col ${isDragging ? "border-blue-300 shadow-md" : "border-gray-200/80"}`}>
+                            <div className={`bg-white/90 rounded-xl border shadow-sm overflow-hidden flex flex-col h-[480px] ${isDragging ? "border-blue-300 shadow-lg" : "border-gray-200/80"}`}>
                               {/* 项目头（拖拽把手） */}
                               <div className={`px-3.5 py-2.5 border-b border-gray-100 select-none ${isDraggableProject ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`} {...(dragHandleProps || {})}>
                                 <div className="flex items-center gap-2 mb-1">
@@ -164,7 +164,7 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
                               </div>
 
                               {/* 待办列表（按任务分组） */}
-                              <div className="px-3.5 py-2 flex-1 overflow-y-auto max-h-[360px]">
+                              <div className="px-3.5 py-2 flex-1 overflow-y-auto min-h-0">
                                 {(() => {
                                   const pid = group.project?.id || null;
                                   // 该项目下的任务（按 order）
@@ -282,8 +282,8 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
                           );
 
                           if (!isDraggableProject) {
-                            return <div key={key} className="w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)]">{cardInner()}</div>;
-                          }
+                            return <div key={key} className="w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)] h-[480px]">{cardInner()}</div>;
+                      }
 
                           return (
                             <Draggable key={key} draggableId={`project-${key}`} index={dragIndex}>
@@ -291,7 +291,7 @@ export default function ProjectOverview({ todos, projects, tasks, onToggle, onQu
                                 <div
                                   ref={dp.innerRef}
                                   {...dp.draggableProps}
-                                  className={snap.isDragging ? "w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)] z-50" : "w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)]"}
+                                  className={`w-full md:w-[calc(50%-6px)] xl:w-[calc(33.333%-8px)] h-[480px] ${snap.isDragging ? "z-50" : ""}`}
                                 >
                                   {cardInner(dp.dragHandleProps as unknown as Record<string, unknown>, snap.isDragging)}
                                 </div>
