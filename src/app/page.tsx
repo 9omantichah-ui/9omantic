@@ -23,15 +23,9 @@ function isToday(dateStr: string | null): boolean {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
-// 更新单条待办（兼容顶层主待办与嵌套子待办），保留主待办已有的 subtodos
+// 更新单条待办
 function applyTodoUpdate(list: Todo[], id: string, updated: Todo): Todo[] {
-  return list.map(t => {
-    if (t.id === id) return { ...updated, subtodos: t.subtodos };
-    if (t.subtodos?.some(s => s.id === id)) {
-      return { ...t, subtodos: t.subtodos.map(s => s.id === id ? updated : s) };
-    }
-    return t;
-  });
+  return list.map(t => t.id === id ? updated : t);
 }
 
 function ProgressBar({ total, done, color }: { total: number; done: number; color: string }) {
@@ -176,28 +170,6 @@ export default function Home() {
     }
   };
 
-  // 为某条待办添加子待办
-  const handleAddSubtodo = async (parentId: string, title: string) => {
-    if (!title.trim()) return;
-    const parent = todos.find(t => t.id === parentId);
-    try {
-      const body: Record<string, unknown> = { title: title.trim(), zone: 0, parentId };
-      if (parent?.projectId) body.projectId = parent.projectId;
-      const r = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (r.ok) {
-        const n = await r.json();
-        setTodos(p => p.map(t => t.id === parentId ? { ...t, subtodos: [...(t.subtodos || []), n] } : t));
-      } else {
-        const err = await r.text();
-        console.error("添加子待办失败:", r.status, err);
-        alert(`添加子待办失败 (${r.status}): ${err}`);
-      }
-    } catch (e) {
-      console.error("添加子待办网络错误:", e);
-      alert("网络错误，请检查连接");
-    }
-  };
-
   const handleCreateProject = async (name: string, groupId?: string) => {
     const cs = ["#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444"];
     try {
@@ -284,7 +256,7 @@ export default function Home() {
   };
   const handleDelete = async (id: string) => {
     try { const r = await fetch(`/api/todos/${id}`, { method: "DELETE" });
-      if (r.ok) setTodos(p => p.filter(t => t.id !== id).map(t => t.subtodos?.some(s => s.id === id) ? { ...t, subtodos: t.subtodos.filter(s => s.id !== id) } : t)); }
+      if (r.ok) setTodos(p => p.filter(t => t.id !== id)); }
     catch (e) { console.error(e); }
   };
 
@@ -484,7 +456,7 @@ export default function Home() {
                             <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
                               className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""}`}>
                               <TodoItem todo={todo} projects={projects} compact
-                                onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onAddToPlan={handleAddToPlan} onAddSubtodo={handleAddSubtodo} />
+                                onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onAddToPlan={handleAddToPlan} />
                             </div>
                           )}
                         </Draggable>
@@ -529,7 +501,7 @@ export default function Home() {
                                     <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
                                       className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""}`}>
                                       <TodoItem todo={todo} projects={projects} compact
-                                        onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onAddToPlan={handleAddToPlan} onAddSubtodo={handleAddSubtodo} />
+                                        onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onAddToPlan={handleAddToPlan} />
                                     </div>
                                   )}
                                 </Draggable>

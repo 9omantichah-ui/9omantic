@@ -61,7 +61,6 @@ export const PUT = withAuthParams(async (request: NextRequest, userId: string, p
 });
 
 export const DELETE = withAuthParams(async (_request: NextRequest, userId: string, params: { id: string }) => {
-  // 同时删除该待办下的子待办
-  await execute("DELETE FROM Todo WHERE (id = ? OR parentId = ?) AND userId = ?", [params.id, params.id, userId]);
+  await execute("DELETE FROM Todo WHERE id = ? AND userId = ?", [params.id, userId]);
   return apiOk({ message: "删除成功" });
 });

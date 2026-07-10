@@ -19,7 +19,7 @@ export const PUT = withAuthParams(async (request: NextRequest, userId: string, p
   return apiOk({ ...p, name: dec(p.name) });
 });
 
-// 删除项目：连同该项目下的待办（含子待办）及其每日计划引用一并删除
+// 删除项目：连同该项目下的待办及其每日计划引用一并删除
 export const DELETE = withAuthParams(async (_request: NextRequest, userId: string, params: { id: string }) => {
   // 该项目下的所有待办 id
   const todoRows = await queryAll("SELECT id FROM Todo WHERE projectId = ? AND userId = ?", [params.id, userId]);
@@ -27,14 +27,9 @@ export const DELETE = withAuthParams(async (_request: NextRequest, userId: strin
 
   if (todoIds.length > 0) {
     const placeholders = todoIds.map(() => "?").join(",");
-    // 清理每日计划中对这些待办（含其子待办）的引用
+    // 清理每日计划中对这些待办的引用
     await execute(
-      `DELETE FROM DailyPlanItem WHERE (todoId IN (${placeholders}) OR todoId IN (SELECT id FROM Todo WHERE parentId IN (${placeholders}))) AND userId = ?`,
-      [...todoIds, ...todoIds, userId]
-    );
-    // 删除子待办（parentId 指向本项目待办的）
-    await execute(
-      `DELETE FROM Todo WHERE parentId IN (${placeholders}) AND userId = ?`,
+      `DELETE FROM DailyPlanItem WHERE todoId IN (${placeholders}) AND userId = ?`,
       [...todoIds, userId]
     );
   }
