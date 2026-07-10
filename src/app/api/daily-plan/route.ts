@@ -30,6 +30,7 @@ export const GET = withAuth(async (request: NextRequest, userId: string) => {
     todoId: item.todoId,
     order: item.order,
     status: item.status,
+    timeSlot: item.timeSlot || "morning",
     userId: item.userId,
     createdAt: item.createdAt,
     todo: item.t_title ? {
@@ -47,10 +48,11 @@ export const GET = withAuth(async (request: NextRequest, userId: string) => {
 });
 
 export const POST = withAuth(async (request: NextRequest, userId: string) => {
-  const { todoId, date } = await request.json();
+  const { todoId, date, timeSlot } = await request.json();
   if (!todoId) {
     return NextResponse.json({ error: "todoId 不能为空" }, { status: 400 });
   }
+  const slot = ["morning", "afternoon", "evening"].includes(timeSlot) ? timeSlot : "morning";
 
   const planDate = date || new Date().toISOString().split("T")[0];
 
@@ -76,20 +78,21 @@ export const POST = withAuth(async (request: NextRequest, userId: string) => {
   const id = cuid();
   const now = new Date().toISOString();
   await execute(
-    'INSERT INTO DailyPlanItem (id, planId, todoId, "order", status, userId, createdAt) VALUES (?,?,?,?,?,?,?)',
-    [id, plan!.id, todoId, maxOrd + 1, "pending", userId, now]
+    'INSERT INTO DailyPlanItem (id, planId, todoId, "order", status, timeSlot, userId, createdAt) VALUES (?,?,?,?,?,?,?,?)',
+    [id, plan!.id, todoId, maxOrd + 1, "pending", slot, userId, now]
   );
 
-  return NextResponse.json({ id, planId: plan!.id, todoId, order: maxOrd + 1, status: "pending" }, { status: 201 });
+  return NextResponse.json({id, planId: plan!.id, todoId, order: maxOrd + 1, status: "pending", timeSlot: slot }, { status: 201 });
 });
 
 export const PUT = withAuth(async (request: NextRequest, userId: string) => {
-  const { items } = await request.json() as { items: { id: string; order?: number; status?: string }[] };
+  const { items } = await request.json() as { items: { id: string; order?: number; status?: string; timeSlot?: string }[] };
   for (const item of items) {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (item.order !== undefined) { sets.push('"order" = ?'); vals.push(item.order); }
     if (item.status !== undefined) { sets.push("status = ?"); vals.push(item.status); }
+    if (item.timeSlot !== undefined) { sets.push("timeSlot = ?"); vals.push(item.timeSlot); }
    if (sets.length === 0) continue;
     vals.push(item.id); vals.push(userId);
     await execute(`UPDATE DailyPlanItem SET ${sets.join(", ")} WHERE id = ? AND userId = ?`, vals);

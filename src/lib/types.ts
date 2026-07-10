@@ -62,6 +62,7 @@ export interface DailyPlanItem {
   todoId: string;
   order: number;
   status: "pending" | "in_progress" | "completed";
+  timeSlot: "morning" | "afternoon" | "evening";
   userId: string;
   createdAt: string;
   todo?: Todo;

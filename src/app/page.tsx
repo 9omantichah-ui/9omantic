@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { Todo, Project, ProjectGroup, Task } from "@/lib/types";
+import { Todo, Project, ProjectGroup, Task, DailyPlanItem } from "@/lib/types";
 import TodoItem from "@/components/TodoItem";
 import AuthForm from "@/components/AuthForm";
 import ProjectGroupSelector from "@/components/ProjectGroupSelector";
@@ -61,6 +61,8 @@ export default function Home() {
   const [showDesc, setShowDesc] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialLoadedRef = useRef(false);
+  const [planItems, setPlanItems] = useState<DailyPlanItem[]>([]);
+  const [planDate, setPlanDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(data => {
@@ -277,16 +279,81 @@ export default function Home() {
     catch (e) { console.error(e); }
   };
 
-  const handleAddToPlan = async (todoId: string) => {
+  const fetchPlan = useCallback(async () => {
+    if (!user) return;
     try {
-      const date = new Date().toISOString().split("T")[0];
-      await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId, date }) });
+      const data = await (await fetch(`/api/daily-plan?date=${planDate}`)).json();
+      if (Array.isArray(data)) setPlanItems(data);
+      else if (Array.isArray(data.items)) setPlanItems(data.items);
     } catch (e) { console.error(e); }
+  }, [user, planDate]);
+
+  useEffect(() => { if (user) fetchPlan(); }, [fetchPlan, user]);
+
+  const navigatePlanDate = (offset: number) => {
+    const d = new Date(planDate);
+    d.setDate(d.getDate() + offset);
+    setPlanDate(d.toISOString().split("T")[0]);
+  };
+  const setPlanToday = () => setPlanDate(new Date().toISOString().split("T")[0]);
+
+  // 把一条待办加入当日计划的指定时段
+  const handleAddToPlanSlot = async (todoId: string, timeSlot: "morning" | "afternoon" | "evening") => {
+    try {
+      await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId, date: planDate, timeSlot }) });
+      fetchPlan();
+    } catch (e) { console.error(e); }
+  };
+
+  // 兼容 TodoItem 上的「加入计划」按钮：加入当天默认时段(上午)
+  const handleAddToPlan = async (todoId: string) => {
+    await handleAddToPlanSlot(todoId, "morning");
+  };
+
+  const handleRemovePlan = async (itemId: string) => {
+    setPlanItems(prev => prev.filter(i => i.id !== itemId));
+    try {
+      await fetch(`/api/daily-plan/${itemId}`, { method: "DELETE" });
+    } catch (e) { console.error(e); fetchPlan(); }
+  };
+
+  const handleUpdatePlanStatus = async (itemId: string, status: string) => {
+    setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, status: status as DailyPlanItem["status"] } : i));
+    try {
+      await fetch("/api/daily-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: itemId, status }] }) });
+    } catch (e) { console.error(e); fetchPlan(); }
   };
 
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
-    const sZ = parseInt(result.source.droppableId), dZ = parseInt(result.destination.droppableId);
+    const srcId = result.source.droppableId, dstId = result.destination.droppableId;
+
+    // ── 当日计划相关拖拽 ──
+    if (dstId.startsWith("plan-") || srcId.startsWith("plan-")) {
+      // 拖出计划区（丢到待办 zone）：忽略，不做移出（移出用删除按钮）
+      if (!dstId.startsWith("plan-")) return;
+      const slot = dstId.replace("plan-", "") as "morning" | "afternoon" | "evening";
+
+      if (srcId.startsWith("plan-")) {
+        // 计划内跨时段/同时段移动：draggableId = plan-item-{itemId}
+        const itemId = result.draggableId.replace("plan-item-", "");
+        const cur = planItems.find(i => i.id === itemId);
+        if (!cur || cur.timeSlot === slot) return;
+        setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, timeSlot: slot } : i));
+        try {
+          await fetch("/api/daily-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: itemId, timeSlot: slot }] }) });
+        } catch (e) { console.error(e); fetchPlan(); }
+      } else {
+        // 从待办区拖入计划：draggableId = todo.id
+        const todoId = result.draggableId;
+        if (planItems.some(i => i.todoId === todoId)) return; // 已在计划中，避免 400
+        handleAddToPlanSlot(todoId, slot);
+      }
+      return;
+    }
+
+    // ── 已安排待办区内拖拽 ──
+    const sZ = parseInt(srcId), dZ = parseInt(dstId);
     const sI = result.source.index, dI = result.destination.index;
     if (sZ === dZ && sI === dI) return;
     // 构建与 UI 渲染一致的分组：zone 0 包含所有待办，zone 1/2/3 只包含未完成或今天完成的
@@ -381,11 +448,10 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── 左右分栏 ── */}
+        {/* ── 主区域（单列全宽） ── */}
         <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-6 items-start">
-          {/* 左侧主区域 */}
-          <div className="flex-1 min-w-0">
+        <div>
+          <div className="min-w-0">
 
             {/* ── 未整理的「待办」── 双列 */}
             <section className="mb-6">
@@ -440,7 +506,7 @@ export default function Home() {
                         </div>
                         {total > 0 && <ProgressBar total={total} done={done} color={zone.accent} />}
                       </div>
-                      <div className="p-2 flex-1 overflow-y-auto max-h-[45vh]">
+                      <div className="p-2 flex-1 overflow-y-auto max-h-[65vh] min-h-[16rem]">
                         <Droppable droppableId={String(zone.id)}>
                           {(provided, snapshot) => (
                             <div ref={provided.innerRef} {...provided.droppableProps}
@@ -470,19 +536,22 @@ export default function Home() {
               </div>
             </section>
 
-          </div>
+            {/* ── 当日计划（在已安排待办下方，同一 DragDropContext 内） ── */}
+            <DailyPlanSection
+              todos={todos}
+              projects={projects}
+              planItems={planItems}
+              selectedDate={planDate}
+              onNavigateDate={navigatePlanDate}
+              onSetToday={setPlanToday}
+              onUpdateStatus={handleUpdatePlanStatus}
+              onRemove={handleRemovePlan}
+              onAddToPlan={handleAddToPlanSlot}
+            />
 
-          {/* 右侧：当日计划 */}
-          <div className="hidden lg:block w-[340px] flex-shrink-0 sticky top-6">
-            <DailyPlanSection todos={todos} projects={projects} />
           </div>
         </div>
         </DragDropContext>
-
-        {/* 移动端当日计划（lg以下显示） */}
-        <div className="lg:hidden mb-6">
-          <DailyPlanSection todos={todos} projects={projects} />
-        </div>
 
         {/* ── 各项目情况概览 ── */}
         <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} tasks={tasks} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onCreateTask={handleCreateTask} onReorderProjects={handleReorderProjects} />
