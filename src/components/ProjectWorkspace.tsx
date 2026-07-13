@@ -90,15 +90,33 @@ export default function ProjectWorkspace({
   );
 
   // 轻量分类标题栏 + 列表行
-  const renderSection = (name: string, list: Todo[], droppableId: string) => (
-    <div className="mb-1">
-      <div className="flex items-center gap-2 px-1 pb-1">
-        <span className="text-[12px] font-semibold text-gray-500">{name}</span>
-        <span className="text-[11px] text-gray-300">{list.length}</span>
+  const renderSection = (name: string, list: Todo[], droppableId: string, isTask = true) => {
+    const accent = project?.color ?? "#94a3b8";
+    const done = list.filter(t => t.completed).length;
+    return (
+      <div className="mb-3">
+        {isTask ? (
+          <div
+            className="flex items-center gap-2 pl-2.5 pr-2 py-1.5 mb-1.5 rounded-md border-l-[3px] bg-gray-50/70"
+            style={{ borderLeftColor: accent }}
+          >
+            <span className="text-[13px] font-semibold text-gray-800 truncate">{name}</span>
+            <span className="text-[11px] text-gray-400 tabular-nums flex-shrink-0">
+              {done > 0 ? `${done}/${list.length}` : list.length}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-1 pb-1">
+            <span className="text-[12px] font-medium text-gray-400">{name}</span>
+            <span className="text-[11px] text-gray-300">{list.length}</span>
+          </div>
+        )}
+        <div className={isTask ? "pl-2.5" : ""}>
+          {renderTodoList(list, droppableId)}
+        </div>
       </div>
-      {renderTodoList(list, droppableId)}
-    </div>
-  );
+    );
+  };
 
   return (
     <section className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden h-full">
@@ -174,7 +192,7 @@ export default function ProjectWorkspace({
             {/* 各分类分组（仅未完成） */}
             {projectTasks.map(task => renderSection(task.name, byTask.get(task.id) ?? [], `ws-task-${task.id}`))}
             {/* 未分类（仅未完成） */}
-            {renderSection("未分类", byTask.get(null) ?? [], "ws-task-none")}
+            {renderSection("未分类", byTask.get(null) ?? [], "ws-task-none", false)}
           </>
         )}
 

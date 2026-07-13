@@ -7,6 +7,7 @@ import AuthForm from "@/components/AuthForm";
 import DailyPlanSection from "@/components/DailyPlanSection";
 import ProjectSidebar, { SidebarView } from "@/components/ProjectSidebar";
 import ProjectWorkspace from "@/components/ProjectWorkspace";
+import TodayView from "@/components/TodayView";
 import Image from "next/image";
 
 function isToday(dateStr: string | null): boolean {
@@ -229,6 +230,23 @@ export default function Home() {
     await handleAddToPlanSlot(todoId, "morning");
   };
 
+  // 今日视图快捷新增：先创建待办（默认进未整理区），再加入当日计划指定时段
+  const handleQuickAddToday = async (title: string, projectId: string | null, taskId: string | null, timeSlot: "morning" | "afternoon" | "evening") => {
+    if (!title.trim()) return;
+    try {
+      const body: Record<string, unknown> = { title: title.trim(), zone: 0 };
+      if (projectId) body.projectId = projectId;
+      if (taskId) body.taskId = taskId;
+      const r = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) { const err = await r.text(); alert(`添加失败 (${r.status}): ${err}`); return; }
+      const n = await r.json();
+      setTodos(p => [...p, n]);
+      // 加入当日计划
+      await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId: n.id, date: planDate, timeSlot }) });
+      fetchPlan();
+    } catch (e) { console.error(e); alert("网络错误，请检查连接"); }
+  };
+
   const handleRemovePlan = async (itemId: string) => {
     setPlanItems(prev => prev.filter(i => i.id !== itemId));
     try {
@@ -269,9 +287,9 @@ export default function Home() {
       if (!dstId.startsWith("plan-")) return;
       const slot = dstId.replace("plan-", "") as "morning" | "afternoon" | "evening";
 
-      if (srcId.startsWith("plan-")) {
-        // 计划内跨时段/同时段移动：draggableId = plan-item-{itemId}
-        const itemId = result.draggableId.replace("plan-item-", "");
+      if (srcId.startsWith("plan-") || srcId.startsWith("today-")) {
+        // 计划内/今日视图跨时段移动：draggableId = plan-item-{id} 或 today-item-{id}
+        const itemId = result.draggableId.replace(/^(plan-item-|today-item-)/, "");
         const cur = planItems.find(i => i.id === itemId);
         if (!cur || cur.timeSlot === slot) return;
         setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, timeSlot: slot } : i));
@@ -409,34 +427,14 @@ export default function Home() {
           {/* 中栏：今日引导 / 工作区 */}
           <div className="min-w-0 h-full overflow-hidden">
             {selectedView === "today" ? (
-              <section className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden h-full">
-                <div className="px-5 py-4 border-b border-gray-100">
-                  <h1 className="text-lg font-bold text-gray-900">今日</h1>
-                  <p className="text-[12px] text-gray-400 mt-1">从右侧安排今天要执行的事，专注完成它们</p>
-                </div>
-                <div className="flex-1 overflow-y-auto p-5 space-y-2">
-                  {planItems.length === 0 ? (
-                    <div className="text-center py-16 text-sm text-gray-300">
-                      今天还没有计划<br />
-                      <span className="text-[12px]">去「收件箱」或项目里挑几件事，拖到右侧计划区</span>
-                    </div>
-                  ) : (
-                    planItems.map(item => (
-                      <div key={item.id} className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border transition-colors ${item.status === "completed" ? "bg-green-50/50 border-green-100" : "bg-gray-50/60 border-gray-100"}`}>
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${item.status === "completed" ? "bg-green-500" : item.status === "in_progress" ? "bg-blue-500" : "bg-gray-300"}`} />
-                        <div className="flex-1 min-w-0">
-                          <span className={`block text-[13px] ${item.status === "completed" ? "line-through text-gray-400" : "text-gray-700"}`}>{item.todo?.title ?? "（待办已删除）"}</span>
-                          <span className="block text-[11px] text-gray-400 mt-0.5 truncate">
-                            {item.todo?.project?.name ?? "未分类"}
-                            {item.todo?.task ? ` · ${item.todo.task.name}` : ""}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.timeSlot === "morning" ? "上午" : item.timeSlot === "afternoon" ? "下午" : "晚上"}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
+              <TodayView
+                planItems={planItems}
+                projects={projects}
+                tasks={tasks}
+                onUpdateStatus={handleUpdatePlanStatus}
+                onRemove={handleRemovePlan}
+                onQuickAddToday={handleQuickAddToday}
+              />
             ) : (
               <ProjectWorkspace
                 project={selectedView === "inbox" ? null : currentProject}

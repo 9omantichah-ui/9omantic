@@ -2,13 +2,8 @@
 
 import { useState } from "react";
 import { Droppable, Draggable } from "@hello-pangea/dnd";
-import{ Todo, Project, DailyPlanItem } from "@/lib/types";
-
-const STATUS_CONFIG = {
-  pending: { label: "未开始", cls: "bg-gray-100 text-gray-500" },
-  in_progress: { label: "进行中", cls: "bg-blue-100 text-blue-600 ring-2 ring-blue-200" },
-  completed: { label: "已完成", cls: "bg-emerald-100 text-emerald-600" },
-};
+import { Todo, Project, DailyPlanItem } from "@/lib/types";
+import PlanTaskCard from "./PlanTaskCard";
 
 export const TIME_SLOTS: { id: "morning" | "afternoon" | "evening"; name: string; icon: string; accent: string }[] = [
   { id: "morning", name: "上午", icon: "🌅", accent: "#f59e0b" },
@@ -45,69 +40,20 @@ export default function DailyPlanSection({
   const completed = planItems.filter(i => i.status === "completed").length;
   const total = planItems.length;
 
-  const renderPlanItem = (item: DailyPlanItem, index: number) => {
-    const todo = item.todo;
-    const statusConfig = STATUS_CONFIG[item.status];
-    const isInProgress = item.status === "in_progress";
-    return (
-      <Draggable key={item.id} draggableId={`plan-item-${item.id}`} index={index}>
-        {(prov, snap) => (
-          <div
-            ref={prov.innerRef}
-            {...prov.draggableProps}
-            {...prov.dragHandleProps}
-            className={`flex items-start gap-2 px-3 py-2 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${
-              snap.isDragging ? "shadow-lg border-blue-300 bg-white" :
-              isInProgress ? "border-blue-200 bg-blue-50/60 shadow-sm" :
-              item.status === "completed" ? "border-gray-100 bg-gray-50/50 opacity-60" :
-              "border-gray-100 bg-white hover:border-gray-200"
-            }`}
-          >
-            <div className="flex-1 min-w-0">
-              <span className={`text-[13px] font-medium ${item.status === "completed" ? "line-through text-gray-400" : "text-gray-800"}`}>
-                {todo?.title || "已删除的待办"}
-              </span>
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                {todo?.project && (
-                  <span className="px-1.5 py-[1px] rounded text-[9px] font-medium text-white" style={{ backgroundColor: todo.project.color }}>
-                    {todo.project.name}
-                  </span>
-                )}
-                {todo?.task && (
-                  <span
-                    className="px-1.5 py-[1px] rounded text-[9px] font-medium"
-                    style={{ backgroundColor: `${todo.project?.color || "#94a3b8"}22`, color: todo.project?.color || "#64748b" }}
-                  >
-                    {todo.task.name}
-                  </span>
-                )}
-                {todo && !todo.project && (
-                  <span className="px-1.5 py-[1px] rounded text-[9px] font-medium bg-gray-100 text-gray-400">未分类</span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <select
-                value={item.status}
-                onChange={e => onUpdateStatus(item.id, e.target.value)}
-                onClick={e => e.stopPropagation()}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-medium border-0 ${statusConfig.cls} cursor-pointer focus:outline-none`}
-              >
-                <option value="pending">未开始</option>
-                <option value="in_progress">进行中</option>
-                <option value="completed">已完成</option>
-              </select>
-              <button onClick={() => onRemove(item.id)} className="p-0.5 text-gray-300 hover:text-red-500 transition-colors" title="移出计划">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-      </Draggable>
-    );
-  };
+  const renderPlanItem = (item: DailyPlanItem, index: number) => (
+    <Draggable key={item.id} draggableId={`plan-item-${item.id}`} index={index}>
+      {(prov, snap) => (
+        <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}>
+          <PlanTaskCard
+            item={item}
+            dragging={snap.isDragging}
+            onUpdateStatus={onUpdateStatus}
+            onRemove={onRemove}
+          />
+        </div>
+      )}
+    </Draggable>
+  );
 
   return (
     <section className="mb-8">
