@@ -129,7 +129,7 @@ export default function ProjectWorkspace({
   // 轻量分类标题栏 + 列表行
   const renderSection = (name: string, list: Todo[], droppableId: string, isTask = true, taskId?: string) => {
     const accent = project?.color ?? "#94a3b8";
-    const pending = list.filter(t => !t.completed);
+    const pending = list.filter(t => !t.completed).sort((a, b) => a.order - b.order);
     const doneList = list.filter(t => t.completed);
     const done = doneList.length;
     const isRenaming = isTask && taskId && renaming?.type === "task" && renaming.id === taskId;
@@ -310,7 +310,7 @@ export default function ProjectWorkspace({
         {isInbox ? (
           (() => {
             const list = byTask.get(null) ?? [];
-            const pending = list.filter(t => !t.completed);
+            const pending = list.filter(t => !t.completed).sort((a, b) => a.order - b.order);
             const doneList = list.filter(t => t.completed);
             const doneOpen = expandedDone.has("ws-inbox");
             return (

@@ -8,6 +8,7 @@ import DailyPlanSection from "@/components/DailyPlanSection";
 import ProjectSidebar, { SidebarView } from "@/components/ProjectSidebar";
 import ProjectWorkspace from "@/components/ProjectWorkspace";
 import TodayView from "@/components/TodayView";
+import AllTodosView from "@/components/AllTodosView";
 import Image from "next/image";
 
 function isToday(dateStr: string | null): boolean {
@@ -20,6 +21,11 @@ function isToday(dateStr: string | null): boolean {
 // 更新单条待办
 function applyTodoUpdate(list: Todo[], id: string, updated: Todo): Todo[] {
   return list.map(t => t.id === id ? updated : t);
+}
+
+// selectedView 是否为具体项目 id（排除 today/inbox/all 等固定视图）
+function isProjectViewId(view: string): boolean {
+  return view !== "today" && view !== "inbox" && view !== "all";
 }
 
 export default function Home() {
@@ -197,6 +203,44 @@ export default function Home() {
     } catch (e) { console.error(e); fetchProjects(); fetchProjectGroups(); }
   };
 
+  // 工作区某分组内待办顺序调整：droppableId 决定分组，仅重排未完成待办的 order 并持久化
+  const handleReorderTodosInSection = async (droppableId: string, fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+
+    // 依据 droppableId 解析该分组内的过滤条件
+    const matchGroup = (t: Todo): boolean => {
+      if (droppableId === "ws-inbox") return !t.projectId;
+      if (droppableId === "ws-task-none") {
+        const pid = isProjectViewId(selectedView) ? selectedView : null;
+        return t.projectId === pid && !t.taskId;
+      }
+      if (droppableId.startsWith("ws-task-")) {
+        const taskId = droppableId.replace("ws-task-", "");
+        return t.taskId === taskId;
+      }
+      return false;
+    };
+
+    // 当前分组内展示的未完成待办（与 UI 渲染顺序一致：按 order 升序）
+    const sectionPending = todos
+      .filter(t => matchGroup(t) && !t.completed)
+      .sort((a, b) => a.order - b.order);
+    if (fromIndex < 0 || fromIndex >= sectionPending.length) return;
+
+    const reordered = [...sectionPending];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    // 生成新的 order 映射（保持各自 zone 不变）
+    const orderMap = new Map(reordered.map((t, i) => [t.id, i]));
+    setTodos(prev => prev.map(t => orderMap.has(t.id) ? { ...t, order: orderMap.get(t.id)! } : t));
+
+    const items = reordered.map((t, i) => ({ id: t.id, zone: t.zone, order: i }));
+    try {
+      await fetch("/api/todos/reorder", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
+    } catch (e) { console.error(e); fetchTodos(); }
+  };
+
   // 概览区：将待办移动到其他任务/项目（更新 taskId 与 projectId）
   const handleMoveTodo = async (todoId: string, projectId: string | null, taskId: string | null) => {
     setTodos(prev => prev.map(t => t.id === todoId ? { ...t, projectId, taskId, task: taskId ? (tasks.find(tk => tk.id === taskId) ? { id: taskId, name: tasks.find(tk => tk.id === taskId)!.name } : t.task) : null } : t));
@@ -341,11 +385,18 @@ export default function Home() {
       return;
     }
 
-    // ── 工作区内拖拽（改分类/项目归属） ──
+    // ── 工作区内拖拽（改分类/项目归属 + 同分类内排序） ──
     if (dstId.startsWith("ws-")) {
       const todoId = result.draggableId;
       const cur = todos.find(t => t.id === todoId);
       if (!cur) return;
+
+      // 同一个 droppable 内拖拽：视为顺序调整（reorder），持久化 order
+      if (srcId === dstId) {
+        handleReorderTodosInSection(dstId, result.source.index, result.destination.index);
+        return;
+      }
+
       let targetProjectId: string | null;
       let targetTaskId: string | null;
       if (dstId === "ws-inbox") {
@@ -400,7 +451,7 @@ export default function Home() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-gray-400 text-sm">加载中...</span></div>;
 
   // ── 当前视图信息 ──
-  const isProjectView = selectedView !== "today" && selectedView !== "inbox";
+  const isProjectView = selectedView !== "today" && selectedView !== "inbox" && selectedView !== "all";
   const currentProject = isProjectView ? (projects.find(p => p.id === selectedView) ?? null) : null;
 
   // 中栏待办：inbox = 无项目；项目视图 = 该项目下待办
@@ -471,6 +522,16 @@ export default function Home() {
                 onRemove={handleRemovePlan}
                 onQuickAddToday={handleQuickAddToday}
                 onDeferToTomorrow={handleDeferToTomorrow}
+              />
+            ) : selectedView === "all" ? (
+              <AllTodosView
+                todos={todos}
+                projects={projects}
+                onToggle={handleToggle}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+                onAddToPlan={handleAddToPlan}
+                onSelectProject={setSelectedView}
               />
             ) : (
               <ProjectWorkspace

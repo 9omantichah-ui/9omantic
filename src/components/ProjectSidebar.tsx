@@ -29,6 +29,7 @@ export default function ProjectSidebar({
   const [newName, setNewName] = useState("");
 
   const inboxCount = pendingCount(todos, null);
+  const allCount = todos.filter(t => !t.completed).length;
 
   // 分组内项目 + 未分组项目
   const groupedIds = new Set(projectGroups.flatMap(g => g.projects.map(p => p.id)));
@@ -131,6 +132,7 @@ export default function ProjectSidebar({
     <aside className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden h-full">
       <div className="px-3 pt-3 pb-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider">工作空间</div>
       <div className="flex-1 overflow-y-auto px-2">
+        <NavItem view="all" icon="全" name="全部待办" meta="按项目聚合查看" count={allCount} />
         <NavItem view="today" icon="今" name="今日" meta="当日计划" count={planCount} />
         <NavItem view="inbox" icon="收" name="收件箱" meta="待归类、待判断" count={inboxCount} />
 
