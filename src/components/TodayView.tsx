@@ -9,6 +9,9 @@ interface TodayViewProps {
   planItems: DailyPlanItem[];
   projects: Project[];
   tasks: Task[];
+  selectedDate: string;
+  onNavigateDate: (offset: number) => void;
+  onSetToday: () => void;
   onUpdateStatus: (itemId: string, status: string) => void;
   onRemove: (itemId: string) => void;
   // 今日快捷新增：创建待办并加入当日计划
@@ -22,13 +25,20 @@ const SLOTS: { id: "morning" | "afternoon" | "evening"; name: string; icon: stri
   { id: "evening", name: "晚上", icon: "🌙", accent: "#8b5cf6" },
 ];
 
-export default function TodayView({ planItems, projects, tasks, onUpdateStatus, onRemove, onQuickAddToday, onDeferToTomorrow }: TodayViewProps) {
+export default function TodayView({ planItems, projects, tasks, selectedDate, onNavigateDate, onSetToday, onUpdateStatus, onRemove, onQuickAddToday, onDeferToTomorrow }: TodayViewProps) {
   const [addingSlot, setAddingSlot] = useState<"morning" | "afternoon" | "evening" | null>(null);
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState<string>("");
   const [taskId, setTaskId] = useState<string>("");
 
   const projectTasks = tasks.filter(t => t.projectId === (projectId || null));
+
+  const isToday = selectedDate === new Date().toISOString().split("T")[0];
+  const dateLabel = (() => {
+    const d = new Date(selectedDate);
+    const w = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][d.getDay()];
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${w}`;
+  })();
 
   const total = planItems.length;
   const done = planItems.filter(i => i.status === "completed").length;
@@ -44,11 +54,29 @@ export default function TodayView({ planItems, projects, tasks, onUpdateStatus, 
   return (
     <section className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden h-full">
       <div className="px-5 pt-4 pb-3 border-b border-gray-100">
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-lg font-bold text-gray-900">今日</h1>
-          {total > 0 && <span className="text-[12px] text-gray-400 tabular-nums">{done}/{total} 已完成</span>}
+        <div className="flex items-center justify-between">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-lg font-bold text-gray-900">{isToday ? "今日" : dateLabel}</h1>
+            {total > 0 && <span className="text-[12px] text-gray-400 tabular-nums">{done}/{total} 已完成</span>}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => onNavigateDate(-1)} className="p-1 text-gray-400 hover:text-gray-600 rounded" title="前一天">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button onClick={onSetToday}
+              className={`px-2.5 py-0.5 rounded-md text-[12px] font-medium transition-all ${isToday ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+              {isToday ? "今天" : "回今天"}
+            </button>
+            <button onClick={() => onNavigateDate(1)} className="p-1 text-gray-400 hover:text-gray-600 rounded" title="后一天">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <p className="text-[12px] text-gray-400 mt-1">今天要执行的事，按上午 / 下午 / 晚上分时段安排，可拖拽调整</p>
+        <p className="text-[12px] text-gray-400 mt-1">{isToday ? "今天" : dateLabel}要执行的事，按上午 / 下午 / 晚上分时段安排，可拖拽调整</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

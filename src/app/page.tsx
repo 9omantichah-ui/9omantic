@@ -518,6 +518,9 @@ export default function Home() {
                 planItems={planItems}
                 projects={projects}
                 tasks={tasks}
+                selectedDate={planDate}
+                onNavigateDate={navigatePlanDate}
+                onSetToday={setPlanToday}
                 onUpdateStatus={handleUpdatePlanStatus}
                 onRemove={handleRemovePlan}
                 onQuickAddToday={handleQuickAddToday}
