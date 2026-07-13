@@ -1,20 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { DragDropContext, DropResult } from "@hello-pangea/dnd";
 import { Todo, Project, ProjectGroup, Task, DailyPlanItem } from "@/lib/types";
-import TodoItem from "@/components/TodoItem";
 import AuthForm from "@/components/AuthForm";
-import ProjectGroupSelector from "@/components/ProjectGroupSelector";
 import DailyPlanSection from "@/components/DailyPlanSection";
-import ProjectOverview from "@/components/ProjectOverview";
+import ProjectSidebar, { SidebarView } from "@/components/ProjectSidebar";
+import ProjectWorkspace from "@/components/ProjectWorkspace";
 import Image from "next/image";
-
-const ZONES = [
-  { id: 1, name: "优先做", accent: "#ef4444", empty: "把最紧急的待办拖到这里" },
-  { id: 2, name: "稍后做", accent: "#f97316", empty: "不急但重要的待办放这里" },
-  { id: 3, name: "晚点做", accent: "#3b82f6", empty: "有空再处理的待办放这里" },
-];
 
 function isToday(dateStr: string | null): boolean {
   if (!dateStr) return false;
@@ -28,19 +21,6 @@ function applyTodoUpdate(list: Todo[], id: string, updated: Todo): Todo[] {
   return list.map(t => t.id === id ? updated : t);
 }
 
-function ProgressBar({ total, done, color }: { total: number; done: number; color: string }) {
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-  const barColor = pct >= 100 ? "#10b981" : pct >= 70 ? color : pct >= 30 ? "#f59e0b" : "#ef4444";
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pct}%`, backgroundColor: barColor }} />
-      </div>
-      <span className="text-[10px] tabular-nums text-gray-400 whitespace-nowrap">{done}/{total}</span>
-    </div>
-  );
-}
-
 export default function Home() {
   const [user, setUser] = useState<{ id: string; nickname: string } | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -49,14 +29,12 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createProjectId, setCreateProjectId] = useState("");
   const [createTitle, setCreateTitle] = useState("");
-  const [createDesc, setCreateDesc] = useState("");
-  const [showDesc, setShowDesc] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialLoadedRef = useRef(false);
   const [planItems, setPlanItems] = useState<DailyPlanItem[]>([]);
   const [planDate, setPlanDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [selectedView, setSelectedView] = useState<SidebarView>("today");
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(data => {
@@ -129,13 +107,11 @@ export default function Home() {
     if (!createTitle.trim()) return;
     try {
       const body: Record<string, unknown> = { title: createTitle.trim(), zone: 0 };
-      if (createDesc.trim()) body.description = createDesc.trim();
-      if (createProjectId) body.projectId = createProjectId;
       const r = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (r.ok) {
         const n = await r.json();
         setTodos(p => [...p, n]);
-        setCreateTitle(""); setCreateDesc(""); setShowDesc(false);
+        setCreateTitle("");
       } else {
         const err = await r.text();
         console.error("创建待办失败:", r.status, err);
@@ -176,71 +152,6 @@ export default function Home() {
       const r = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, color: cs[projects.length % cs.length], groupId }) });
       if (r.ok) { fetchProjects(); fetchProjectGroups(); }
-    } catch (e) { console.error(e); }
-  };
-
-  const handleCreateGroup = async (name: string) => {
-    try {
-      const r = await fetch("/api/project-groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
-      if (r.ok) {
-        const newGroup = await r.json();
-        setProjectGroups(prev => [...prev, { ...newGroup, projects: newGroup.projects || [] }]);
-      } else {
-        const err = await r.text();
-        console.error("创建分组失败:", r.status, err);
-        alert(`创建分组失败 (${r.status}): ${err}`);
-      }
-    } catch (e) { console.error(e); alert("网络错误，无法创建分组"); }
-  };
-
-  const handleToggleGroupCollapse = async (groupId: string, collapsed: boolean) => {
-    setProjectGroups(prev => prev.map(g => g.id === groupId ? { ...g, collapsed } : g));
-    try { await fetch(`/api/project-groups/${groupId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ collapsed }) }); }
-    catch (e) { console.error(e); }
-  };
-
-  const handleMoveProject = async (projectId: string, groupId: string | null) => {
-    try {
-      await fetch("/api/projects", { method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: [{ id: projectId, order: 0, groupId }] }) });
-      fetchProjects(); fetchProjectGroups();
-    } catch (e) { console.error(e); }
-  };
-
-  const handleDeleteProject = async (projectId: string) => {
-    // 乐观更新：移除项目、清理该项目下的待办
-    setProjects(prev => prev.filter(p => p.id !== projectId));
-    setProjectGroups(prev => prev.map(g => ({ ...g, projects: g.projects.filter(p => p.id !== projectId) })));
-    setTodos(prev => prev.filter(t => t.projectId !== projectId));
-    try {
-      await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
-    } catch (e) { console.error(e); }
-  };
-
-  // 概览区拖拽：项目卡片排序（同组内）
-  const handleReorderProjects = async (items: { id: string; order: number; groupId: string | null }[]) => {
-    // 乐观更新：projects 顺序 + projectGroups.projects 顺序
-    const orderMap = new Map(items.map(i => [i.id, i.order]));
-    setProjects(prev => [...prev]
-      .map(p => orderMap.has(p.id) ? { ...p, order: orderMap.get(p.id)! } : p)
-      .sort((a, b) => a.order - b.order));
-    setProjectGroups(prev => prev.map(g => ({
-      ...g,
-      projects: [...g.projects]
-        .map(p => orderMap.has(p.id) ? { ...p, order: orderMap.get(p.id)! } : p)
-        .sort((a, b) => a.order - b.order),
-    })));
-    try {
-      await fetch("/api/projects", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
-    } catch (e) { console.error(e); }
-  };
-
-  // 更新项目颜色
-  const handleUpdateProjectColor = async (projectId: string, color: string) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, color } : p));
-    setProjectGroups(prev => prev.map(g => ({ ...g, projects: g.projects.map(p => p.id === projectId ? { ...p, color } : p) })));
-    try {
-      await fetch(`/api/projects/${projectId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ color }) });
     } catch (e) { console.error(e); }
   };
 
@@ -341,6 +252,35 @@ export default function Home() {
       return;
     }
 
+    // ── 工作区内拖拽（改分类/项目归属） ──
+    if (dstId.startsWith("ws-")) {
+      const todoId = result.draggableId;
+      const cur = todos.find(t => t.id === todoId);
+      if (!cur) return;
+      let targetProjectId: string | null;
+      let targetTaskId: string | null;
+      if (dstId === "ws-inbox") {
+        targetProjectId = null;
+        targetTaskId = null;
+      } else if (dstId === "ws-task-none") {
+        // 当前项目下的未分类：projectId 取当前视图项目
+        targetProjectId = typeof selectedView === "string" && selectedView !== "today" && selectedView !== "inbox" ? selectedView : cur.projectId;
+        targetTaskId = null;
+      } else if (dstId.startsWith("ws-task-")) {
+        targetTaskId = dstId.replace("ws-task-", "");
+        const task = tasks.find(tk => tk.id === targetTaskId);
+        targetProjectId = task ? task.projectId : cur.projectId;
+      } else {
+        return;
+      }
+      if (cur.projectId === targetProjectId && (cur.taskId ?? null) === targetTaskId) return;
+      handleMoveTodo(todoId, targetProjectId, targetTaskId);
+      return;
+    }
+
+    // 源自工作区但目标非计划/工作区（无意义），忽略
+    if (srcId.startsWith("ws-")) return;
+
     // ── 已安排待办区内拖拽 ──
     const sZ = parseInt(srcId), dZ = parseInt(dstId);
     const sI = result.source.index, dI = result.destination.index;
@@ -370,162 +310,109 @@ export default function Home() {
   if (!user) return <AuthForm onSuccess={(u) => { setUser(u); setLoading(true); }} />;
   if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-gray-400 text-sm">加载中...</span></div>;
 
-  const poolTodos = todos.filter(t => t.zone === 0);
+  // ── 当前视图信息 ──
+  const isProjectView = selectedView !== "today" && selectedView !== "inbox";
+  const currentProject = isProjectView ? (projects.find(p => p.id === selectedView) ?? null) : null;
+
+  // 中栏待办：inbox = 无项目；项目视图 = 该项目下待办
+  const workspaceTodos = selectedView === "inbox"
+    ? todos.filter(t => !t.projectId)
+    : isProjectView
+      ? todos.filter(t => t.projectId === selectedView)
+      : [];
 
   return (
-    <main className="min-h-screen py-6 px-4 lg:px-8 bg-[#f5f6f8]">
-      <div className="max-w-[1400px] mx-auto">
-
-        {/* ── 品牌区 ── */}
-        <header className="mb-7 flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <Image src="/logo.svg" alt="ActionFlow" width={44} height={44} className="flex-shrink-0" />
-            <div>
-              <div className="flex items-baseline gap-2">
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight">ActionFlow</h1>
-                <span className="text-sm font-medium text-gray-400">行动秩序</span>
-              </div>
-              <p className="text-[13px] font-semibold text-gray-600 mt-0.5">随手记录，灵活规划，高效执行</p>
+    <main className="min-h-screen bg-[#f5f6f8] flex flex-col h-screen overflow-hidden">
+      {/* ── 顶部栏：品牌 + 全局收集 ── */}
+      <header className="flex items-center gap-4 px-5 py-3 bg-white border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <Image src="/logo.svg" alt="ActionFlow" width={32} height={32} />
+          <div className="hidden sm:block">
+            <div className="flex items-baseline gap-1.5">
+              <h1 className="text-base font-bold text-gray-900 tracking-tight">ActionFlow</h1>
+              <span className="text-xs font-medium text-gray-400">行动秩序</span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <p className="text-[11px] text-gray-400 tabular-nums">{todos.filter(t => !t.completed).length} 进行中 · {todos.filter(t => t.completed).length} 已完成</p>
-            <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
-              <span className="text-xs text-gray-400">{user.nickname}</span>
-              <button onClick={async () => { await fetch("/api/auth/me", { method: "DELETE" }); setUser(null); setTodos([]); setProjects([]); }}
-                className="text-[11px] text-gray-400 hover:text-red-500 px-2 py-0.5 rounded border border-gray-200 transition-colors">退出</button>
-            </div>
-          </div>
-        </header>
+        </div>
 
-        {/* ── 添加待办（在 DragDropContext 外面） ── */}
-        <section className="mb-6">
-          <h2 className="text-sm font-bold text-gray-800 mb-2">添加一个「待办」</h2>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3.5">
-            <div className="flex items-center gap-3">
-              <input ref={inputRef} type="text" placeholder="写下一个待办..." value={createTitle}
-                onChange={e => setCreateTitle(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleCreate(); }}
-                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder:text-gray-400 transition-all" />
-              <button type="button" onClick={handleCreate}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${createTitle.trim() ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.97]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
-                disabled={!createTitle.trim()}>添加待办</button>
-            </div>
-            <div className="mt-2.5">
-              <ProjectGroupSelector
+        {/* 全局收集栏 */}
+        <div className="flex-1 flex items-center gap-2 max-w-2xl">
+          <input ref={inputRef} type="text" placeholder="随手记录一件事，回车收进收件箱…" value={createTitle}
+            onChange={e => setCreateTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleCreate(); }}
+            className="flex-1 px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder:text-gray-400 transition-all" />
+          <button type="button" onClick={handleCreate}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${createTitle.trim() ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.97]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+            disabled={!createTitle.trim()}>收集</button>
+        </div>
+
+        <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
+          <p className="hidden md:block text-[11px] text-gray-400 tabular-nums">{todos.filter(t => !t.completed).length} 进行中 · {todos.filter(t => t.completed).length} 已完成</p>
+          <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
+          <span className="text-xs text-gray-400">{user.nickname}</span>
+            <button onClick={async () => { await fetch("/api/auth/me", { method: "DELETE" }); setUser(null); setTodos([]); setProjects([]); }}
+              className="text-[11px] text-gray-400 hover:text-red-500 px-2 py-0.5 rounded border border-gray-200 transition-colors">退出</button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── 三栏工作区 ── */}
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="flex-1 grid grid-cols-[244px_1fr_388px] gap-4 p-4 min-h-0">
+          {/* 左栏：项目导航 */}
+          <ProjectSidebar
+            todos={todos}
+            projects={projects}
+            projectGroups={projectGroups}
+            planCount={planItems.length}
+            selectedView={selectedView}
+        onSelectView={setSelectedView}
+            onCreateProject={(name) => handleCreateProject(name)}
+          />
+
+          {/* 中栏：今日引导 / 工作区 */}
+          <div className="min-w-0 h-full overflow-hidden">
+            {selectedView === "today" ? (
+              <section className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden h-full">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <h1 className="text-lg font-bold text-gray-900">今日</h1>
+                  <p className="text-[12px] text-gray-400 mt-1">从右侧安排今天要执行的事，专注完成它们</p>
+                </div>
+                <div className="flex-1 overflow-y-auto p-5 space-y-2">
+                  {planItems.length === 0 ? (
+                    <div className="text-center py-16 text-sm text-gray-300">
+                      今天还没有计划<br />
+                      <span className="text-[12px]">去「收件箱」或项目里挑几件事，拖到右侧计划区</span>
+                    </div>
+                  ) : (
+                    planItems.map(item => (
+                      <div key={item.id} className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border transition-colors ${item.status === "completed" ? "bg-green-50/50 border-green-100" : "bg-gray-50/60 border-gray-100"}`}>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${item.status === "completed" ? "bg-green-500" : item.status === "in_progress" ? "bg-blue-500" : "bg-gray-300"}`} />
+                        <span className={`flex-1 text-[13px] ${item.status === "completed" ? "line-through text-gray-400" : "text-gray-700"}`}>{item.todo?.title ?? "（待办已删除）"}</span>
+                        <span className="text-[10px] text-gray-400">{item.timeSlot === "morning" ? "上午" : item.timeSlot === "afternoon" ? "下午" : "晚上"}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            ) : (
+              <ProjectWorkspace
+                project={selectedView === "inbox" ? null : currentProject}
+                todos={workspaceTodos}
                 projects={projects}
-                projectGroups={projectGroups}
-                selectedProjectId={createProjectId}
-                onSelectProject={setCreateProjectId}
-                onCreateProject={handleCreateProject}
-                onCreateGroup={handleCreateGroup}
-                onToggleGroupCollapse={handleToggleGroupCollapse}
-                onMoveProject={handleMoveProject}
-                onDeleteProject={handleDeleteProject}
+                tasks={tasks}
+                onToggle={handleToggle}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+         onAddToPlan={handleAddToPlan}
+                onQuickAdd={handleQuickAdd}
+                onCreateTask={handleCreateTask}
               />
-            </div>
-            <div className="mt-2 flex items-center">
-              <button onClick={() => setShowDesc(!showDesc)}
-                className={`px-1.5 py-0.5 rounded-full text-[10px] transition-all ${showDesc ? "bg-gray-200 text-gray-600" : "text-gray-400 hover:text-gray-500"}`}>
-                {showDesc ? "收起备注" : "+ 备注"}
-              </button>
-            </div>
-            {showDesc && (
-              <textarea placeholder="备注（可选）" value={createDesc} onChange={e => setCreateDesc(e.target.value)} rows={2}
-                className="mt-2 w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 focus:outline-none focus:border-blue-400 resize-none placeholder:text-gray-400 transition-all" />
             )}
           </div>
-        </section>
 
-        {/* ── 主区域（单列全宽） ── */}
-        <DragDropContext onDragEnd={handleDragEnd}>
-        <div>
-          <div className="min-w-0">
-
-            {/* ── 未整理的「待办」── 双列 */}
-            <section className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-bold text-gray-800">未整理的「待办」<span className="ml-2 text-[11px] font-normal text-gray-400">{poolTodos.length} 项</span></h2>
-                {poolTodos.length >= 6 && (
-                  <span className="text-[11px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">未整理待办有点多，先挑几个安排一下。</span>
-                )}
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
-                <Droppable droppableId="0">
-                  {(provided, snapshot) => (
-                    <div ref={provided.innerRef} {...provided.droppableProps}
-                      className={`grid grid-cols-1 md:grid-cols-2 gap-1.5 min-h-[3rem] rounded-lg p-1 transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
-                      {poolTodos.length === 0 && !snapshot.isDraggingOver && (
-                        <div className="col-span-full text-center py-5 text-sm text-gray-300">暂无未整理待办</div>
-                      )}
-                      {poolTodos.map((todo, i) => (
-                        <Draggable key={todo.id} draggableId={todo.id} index={i}>
-                          {(prov, snap) => (
-                            <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
-                              className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""}`}>
-                              <TodoItem todo={todo} projects={projects} compact
-                                onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onAddToPlan={handleAddToPlan} />
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </div>
-            </section>
-
-            {/* ── 已安排的「待办」 ── */}
-            <section className="mb-8">
-              <h2 className="text-sm font-bold text-gray-800 mb-2">已安排的「待办」</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {ZONES.map(zone => {
-                  const zt = todos.filter(t => t.zone === zone.id && (!t.completed || isToday(t.completedAt)));
-                  const total = zt.length, done = zt.filter(t => t.completed).length;
-                  return (
-                    <div key={zone.id} className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
-                      <div className="px-4 py-2.5 border-b border-gray-100">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: zone.accent }} />
-                            <span className="text-xs font-semibold text-gray-700">{zone.name}</span>
-                          </div>
-                          {total > 0 && <span className="text-[10px] text-gray-400 tabular-nums">{done}/{total}</span>}
-                        </div>
-                        {total > 0 && <ProgressBar total={total} done={done} color={zone.accent} />}
-                      </div>
-                      <div className="p-2 flex-1 overflow-y-auto max-h-[65vh] min-h-[16rem]">
-                        <Droppable droppableId={String(zone.id)}>
-                          {(provided, snapshot) => (
-                            <div ref={provided.innerRef} {...provided.droppableProps}
-                              className={`space-y-1.5 min-h-[3.5rem] rounded-lg p-1.5 transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
-                              {zt.length === 0 && !snapshot.isDraggingOver && (
-                                <div className="text-center py-5 text-xs text-gray-300">{zone.empty}</div>
-                              )}
-                              {zt.map((todo, i) => (
-                                <Draggable key={todo.id} draggableId={todo.id} index={i}>
-                                  {(prov, snap) => (
-                                    <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
-                                      className={`cursor-grab active:cursor-grabbing ${snap.isDragging ? "dragging-card" : ""}`}>
-                                      <TodoItem todo={todo} projects={projects} compact
-                                        onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onAddToPlan={handleAddToPlan} />
-                                    </div>
-                                  )}
-                                </Draggable>
-                              ))}
-                              {provided.placeholder}
-                            </div>
-                          )}
-                        </Droppable>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* ── 当日计划（在已安排待办下方，同一 DragDropContext 内） ── */}
+          {/* 右栏：当日计划（固定） */}
+          <div className="min-w-0 h-full overflow-y-auto">
             <DailyPlanSection
               todos={todos}
               projects={projects}
@@ -537,14 +424,9 @@ export default function Home() {
               onRemove={handleRemovePlan}
               onAddToPlan={handleAddToPlanSlot}
             />
-
           </div>
         </div>
-        </DragDropContext>
-
-        {/* ── 各项目情况概览 ── */}
-        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} tasks={tasks} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onCreateTask={handleCreateTask} onReorderProjects={handleReorderProjects} onUpdateProjectColor={handleUpdateProjectColor} onMoveTodo={handleMoveTodo} />
-      </div>
+      </DragDropContext>
     </main>
   );
 }
