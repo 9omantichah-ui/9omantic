@@ -294,12 +294,25 @@ export default function Home() {
   };
   const setPlanToday = () => setPlanDate(new Date().toISOString().split("T")[0]);
 
-  // 把一条待办加入当日计划的指定时段
+  // 把一条待办加入当日计划的指定时段（乐观更新，拖入即时可见）
   const handleAddToPlanSlot = async (todoId: string, timeSlot: "morning" | "afternoon" | "evening") => {
+    if (planItems.some(i => i.todoId === todoId)) return; // 已在计划中
+    const todo = todos.find(t => t.id === todoId);
+    if (!todo) return;
+    const tempId = `temp-${todoId}-${Date.now()}`;
+    const optimistic = {
+      id: tempId, todoId, order: 9999, status: "pending", timeSlot,
+      todo,
+    } as unknown as DailyPlanItem;
+    setPlanItems(prev => [...prev, optimistic]);
     try {
-      await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId, date: planDate, timeSlot }) });
+      const r = await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId, date: planDate, timeSlot }) });
+      if (!r.ok) throw new Error(await r.text());
       fetchPlan();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setPlanItems(prev => prev.filter(i => i.id !== tempId)); // 回滚
+    }
   };
 
   // 兼容 TodoItem 上的「加入计划」按钮：加入当天默认时段(上午)
@@ -379,10 +392,32 @@ export default function Home() {
       const slot = dstId.replace("plan-", "") as "morning" | "afternoon" | "evening";
 
       if (srcId.startsWith("plan-") || srcId.startsWith("today-")) {
-        // 计划内/今日视图跨时段移动：draggableId = plan-item-{id} 或 today-item-{id}
+        // 计划内/今日视图移动：draggableId = plan-item-{id} 或 today-item-{id}
         const itemId = result.draggableId.replace(/^(plan-item-|today-item-)/, "");
         const cur = planItems.find(i => i.id === itemId);
-        if (!cur || cur.timeSlot === slot) return;
+        if (!cur) return;
+
+        // 同一时段内拖拽：调整顺序，持久化 order
+        if (srcId === dstId) {
+          const slotItems = planItems
+            .filter(i => (i.timeSlot || "morning") === slot)
+            .sort((a, b) => {
+              const c = (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0);
+              return c !== 0 ? c : (a.order ?? 0) - (b.order ?? 0);
+            });
+          const [moved] = slotItems.splice(result.source.index, 1);
+          if (!moved) return;
+          slotItems.splice(result.destination.index, 0, moved);
+          const orderMap = new Map(slotItems.map((it, idx) => [it.id, idx]));
+          setPlanItems(prev => prev.map(i => orderMap.has(i.id) ? { ...i, order: orderMap.get(i.id)! } : i));
+          try {
+            await fetch("/api/daily-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: slotItems.map((it, idx) => ({ id: it.id, order: idx })) }) });
+          } catch (e) { console.error(e); fetchPlan(); }
+          return;
+        }
+
+        // 跨时段移动
+        if (cur.timeSlot === slot) return;
         setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, timeSlot: slot } : i));
         try {
           await fetch("/api/daily-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: itemId, timeSlot: slot }] }) });

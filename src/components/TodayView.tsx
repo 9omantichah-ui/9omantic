@@ -88,7 +88,10 @@ export default function TodayView({ planItems, projects, tasks, selectedDate, on
         {SLOTS.map(slot => {
           const slotItems = planItems
             .filter(i => (i.timeSlot || "morning") === slot.id)
-            .sort((a, b) => (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0));
+            .sort((a, b) => {
+              const c = (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0);
+              return c !== 0 ? c : (a.order ?? 0) - (b.order ?? 0);
+            });
           return (
             <div key={slot.id} className="bg-gray-50/60 rounded-xl border border-gray-100">
               <div className="px-4 py-2.5 flex items-center justify-between">
