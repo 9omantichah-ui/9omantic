@@ -19,39 +19,30 @@ interface ProjectWorkspaceProps {
   onCreateTask: (projectId: string | null, name: string) => Promise<Task | null>;
 }
 
-// 段内快速添加输入框
-function QuickAdd({ placeholder, onAdd }: { placeholder: string; onAdd: (title: string) => void }) {
-  const [val, setVal] = useState("");
-  const submit = () => { const t = val.trim(); if (!t) return; onAdd(t); setVal(""); };
-  return (
-    <div className="flex gap-2 px-2.5 py-2 border-t border-dashed border-gray-100">
-      <input
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submit(); }}
-        placeholder={placeholder}
-        className="flex-1 px-2.5 py-1.5 bg-gray-50 border border-transparent rounded-lg text-[13px] focus:outline-none focus:border-blue-300 focus:bg-white transition-all placeholder:text-gray-400"
-      />
-      <button onClick={submit} className="px-3 rounded-lg bg-blue-50 text-blue-600 text-[13px] font-medium hover:bg-blue-100 transition-colors">添加</button>
-    </div>
-  );
-}
-
 export default function ProjectWorkspace({
   project, todos, tasks, projects, onToggle, onUpdate, onDelete, onAddToPlan, onQuickAdd, onCreateTask,
 }: ProjectWorkspaceProps) {
-  const [creatingTask, setCreatingTask] = useState(false);
+  // 顶部操作栏内联表单状态
+  const [addingTodo, setAddingTodo] = useState(false);
+  const [newTodoTitle, setNewTodoTitle] = useState("");
+  const [newTodoTaskId, setNewTodoTaskId] = useState<string>(""); // "" = 未分类
+  const [addingTask, setAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
+  const [showDone, setShowDone] = useState(false);
 
   const isInbox = project === null;
   const projectId = project?.id ?? null;
 
-  // 当前项目的分类（收件箱视图不展示分类分组
+  // 当前项目的分类（收件箱视图不展示分类分组）
   const projectTasks = isInbox ? [] : tasks.filter(t => t.projectId === projectId);
 
-  // 按分类分组：有分类的归入对应分类，无分类归入「未分类」
+  // 分离已完成 / 未完成
+  const pendingTodos = todos.filter(t => !t.completed);
+  const doneTodos = todos.filter(t => t.completed);
+
+  // 按分类分组（仅未完成）
   const byTask = new Map<string | null, Todo[]>();
-  todos.forEach(t => {
+  pendingTodos.forEach(t => {
     const key = t.taskId ?? null;
     if (!byTask.has(key)) byTask.set(key, []);
     byTask.get(key)!.push(t);
@@ -59,10 +50,17 @@ export default function ProjectWorkspace({
 
   const submitCreateTask = async () => {
     const name = newTaskName.trim();
-    if (!name) { setCreatingTask(false); return; }
+    if (!name) { setAddingTask(false); return; }
     await onCreateTask(projectId, name);
     setNewTaskName("");
-    setCreatingTask(false);
+    setAddingTask(false);
+  };
+
+  const submitAddTodo = () => {
+    const title = newTodoTitle.trim();
+    if (!title) { setAddingTodo(false); return; }
+    onQuickAdd(projectId, title, newTodoTaskId || null);
+    setNewTodoTitle("");
   };
 
   // 渲染一组待办
@@ -70,9 +68,9 @@ export default function ProjectWorkspace({
     <Droppable droppableId={droppableId}>
       {(provided, snapshot) => (
         <div ref={provided.innerRef} {...provided.droppableProps}
-          className={`p-1.5 space-y-1 min-h-[2.5rem] rounded-lg transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
+          className={`py-1 space-y-0.5 min-h-[2rem] rounded-lg transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
           {list.length === 0 && !snapshot.isDraggingOver && (
-            <div className="text-center py-3 text-[12px] text-gray-300">暂无待办</div>
+            <div className="py-2 pl-2 text-[12px] text-gray-300">暂无待办</div>
           )}
           {list.map((todo, i) => (
             <Draggable key={todo.id} draggableId={todo.id} index={i}>
@@ -91,75 +89,114 @@ export default function ProjectWorkspace({
     </Droppable>
   );
 
-  const pending = todos.filter(t => !t.completed).length;
-  const done = todos.filter(t => t.completed).length;
+  // 轻量分类标题栏 + 列表行
+  const renderSection = (name: string, list: Todo[], droppableId: string) => (
+    <div className="mb-1">
+      <div className="flex items-center gap-2 px-1 pb-1">
+        <span className="text-[12px] font-semibold text-gray-500">{name}</span>
+        <span className="text-[11px] text-gray-300">{list.length}</span>
+      </div>
+      {renderTodoList(list, droppableId)}
+    </div>
+  );
 
   return (
     <section className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden h-full">
       {/* 标题区 */}
-      <div className="px-5 py-4 border-b border-gray-100">
+      <div className="px-5 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
           {project && <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: project.color }} />}
           <h1 className="text-lg font-bold text-gray-900 truncate">{isInbox ? "收件箱" : project!.name}</h1>
         </div>
         <p className="text-[12px] text-gray-400 mt-1">
-          {isInbox ? "暂未归属项目的待办，集中在这里快速整理" : `${pending} 项待办 · ${done} 项已完成`}
+          {isInbox ? "暂未归属项目的待办，集中在这里快速整理" :`${pendingTodos.length} 项待办进行中`}
         </p>
+
+        {/* 顶部固定操作栏 */}
+        <div className="flex items-center gap-2 mt-3">
+          <button onClick={() => { setAddingTodo(v => !v); setAddingTask(false); }}
+            className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[12px] font-medium hover:bg-blue-100 transition-colors">
+            ＋ 新增待办
+          </button>
+          {!isInbox && (
+            <button onClick={() => { setAddingTask(v => !v); setAddingTodo(false); }}
+              className="px-2.5 py-1 rounded-lg bg-gray-50 text-gray-600 text-[12px] font-medium hover:bg-gray-100 transition-colors">
+              ＋ 新增分类 / 阶段
+            </button>
+          )}
+        </div>
+
+        {/* 新增待办内联表单 */}
+        {addingTodo && (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              autoFocus
+              value={newTodoTitle}
+              onChange={e => setNewTodoTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submitAddTodo(); if (e.key === "Escape") { setAddingTodo(false); setNewTodoTitle(""); } }}
+              placeholder="待办内容…"
+              className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:border-blue-400"
+            />
+            {!isInbox && (
+              <select value={newTodoTaskId} onChange={e => setNewTodoTaskId(e.target.value)}
+                className="px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[12px] text-gray-600 focus:outline-none focus:border-blue-400">
+                <option value="">未分类</option>
+                {projectTasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            )}
+            <button onClick={submitAddTodo} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-medium hover:bg-blue-500">添加</button>
+          </div>
+        )}
+
+        {/* 新增分类内联表单 */}
+        {addingTask && !isInbox && (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              autoFocus
+              value={newTaskName}
+              onChange={e => setNewTaskName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submitCreateTask(); if (e.key === "Escape") { setAddingTask(false); setNewTaskName(""); } }}
+              placeholder="分类 / 阶段名称"
+              className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:border-blue-400"
+            />
+            <button onClick={submitCreateTask} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-medium hover:bg-blue-500">确定</button>
+            <button onClick={() => { setAddingTask(false); setNewTaskName(""); }} className="text-[12px] text-gray-400">取消</button>
+          </div>
+        )}
       </div>
 
       {/* 待办列表 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 py-3">
         {isInbox ? (
-          // 收件箱：单块列表 + 快速添加
-          <div className="border border-gray-100 rounded-xl overflow-hidden">
-            {renderTodoList(byTask.get(null) ?? [], "ws-inbox")}
-            <QuickAdd placeholder="随手记录一件待办…" onAdd={title => onQuickAdd(null, title, null)} />
-          </div>
+          renderTodoList(byTask.get(null) ?? [], "ws-inbox")
         ) : (
           <>
-            {/* 各分类分组 */}
-            {projectTasks.map(task => (
-              <div key={task.id} className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-2 px-3.5 py-2.5 bg-gray-50/60 border-b border-gray-100">
-                  <span className="text-[13px] font-semibold text-gray-700">{task.name}</span>
-                  <span className="text-[11px] text-gray-400">{(byTask.get(task.id) ?? []).length} 项</span>
-                </div>
-                {renderTodoList(byTask.get(task.id) ?? [], `ws-task-${task.id}`)}
-                <QuickAdd placeholder={`在「${task.name}」中添加待办`} onAdd={title => onQuickAdd(projectId, title, task.id)} />
-              </div>
-            ))}
-
-            {/* 未分类待办（无 taskId） */}
-            <div className="border border-gray-100 rounded-xl overflow-hidden">
-              <div className="flex items-center gap-2 px-3.5 py-2.5 bg-gray-50/60 border-b border-gray-100">
-                <span className="text-[13px] font-semibold text-gray-700">未分类</span>
-                <span className="text-[11px] text-gray-400">{(byTask.get(null) ?? []).length} 项</span>
-              </div>
-              {renderTodoList(byTask.get(null) ?? [], "ws-task-none")}
-              <QuickAdd placeholder="添加待办到当前项目" onAdd={title => onQuickAdd(projectId, title, null)} />
-            </div>
-
-            {/* 新建分类 */}
-            {creatingTask ? (
-              <div className="flex items-center gap-2">
-                <input
-                  autoFocus
-                  value={newTaskName}
-                  onChange={e => setNewTaskName(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submitCreateTask(); if (e.key === "Escape") { setCreatingTask(false); setNewTaskName(""); } }}
-                  placeholder="分类 / 阶段名称"
-                  className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:border-blue-400"
-                />
-                <button onClick={submitCreateTask} className="px-3 py-2 rounded-lg bg-blue-50 text-blue-600 text-[13px] font-medium">确定</button>
-                <button onClick={() => { setCreatingTask(false); setNewTaskName(""); }} className="text-[12px] text-gray-400">取消</button>
-              </div>
-            ) : (
-              <button onClick={() => setCreatingTask(true)}
-                className="w-full py-2.5 text-[13px] text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl border border-dashed border-gray-200 transition-colors">
-                ＋ 新建分类 / 阶段
-              </button>
-            )}
+            {/* 各分类分组（仅未完成） */}
+            {projectTasks.map(task => renderSection(task.name, byTask.get(task.id) ?? [], `ws-task-${task.id}`))}
+            {/* 未分类（仅未完成） */}
+            {renderSection("未分类", byTask.get(null) ?? [], "ws-task-none")}
           </>
+        )}
+
+        {/* 统一已完成折叠区 */}
+        {doneTodos.length > 0 && (
+          <div className="mt-3 pt-2 border-t border-gray-100">
+            <button onClick={() => setShowDone(v => !v)}
+              className="flex items-center gap-1.5 px-1 py-1 text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors">
+              <svg className={`w-3 h-3 transition-transform ${showDone ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              已完成（{doneTodos.length}）
+            </button>
+            {showDone && (
+              <div className="py-1 space-y-0.5">
+                {doneTodos.map(todo => (
+                  <TodoItem key={todo.id} todo={todo} projects={projects} compact
+                    onToggle={onToggle} onUpdate={onUpdate} onDelete={onDelete} />
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </section>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Droppable, Draggable } from "@hello-pangea/dnd";
 import { Todo, Project, ProjectGroup } from "@/lib/types";
 
 export type SidebarView = "today" | "inbox" | string; // string = projectId
@@ -13,6 +14,7 @@ interface ProjectSidebarProps {
   selectedView: SidebarView;
   onSelectView: (view: SidebarView) => void;
   onCreateProject: (name: string) => void;
+  onReorderProjects: (groupId: string | null, orderedIds: string[]) => void;
 }
 
 // 计算某项目下未完成待办数
@@ -69,8 +71,60 @@ export default function ProjectSidebar({
     );
   };
 
-  const renderProject = (p: Project) => (
-    <NavItem key={p.id} view={p.id} dot={p.color} name={p.name} count={pendingCount(todos, p.id)} />
+  // 可拖拽排序的项目行：把手拖拽、点击切换（分离避免冲突）
+  const renderProjectDraggable = (p: Project, index: number) => {
+    const active = selectedView === p.id;
+    const count = pendingCount(todos, p.id);
+    return (
+      <Draggable key={p.id} draggableId={`proj-${p.id}`} index={index}>
+        {(prov, snap) => (
+          <div
+            ref={prov.innerRef}
+            {...prov.draggableProps}
+            className={`group flex items-center gap-1.5 rounded-lg mb-0.5 transition-colors ${
+              snap.isDragging ? "bg-white shadow-md ring-1 ring-blue-200" : ""
+            }`}
+          >
+            {/* 弱化拖拽把手 */}
+            <span
+              {...prov.dragHandleProps}
+              className="pl-1.5 py-2 text-gray-200 group-hover:text-gray-400 cursor-grab active:cursor-grabbing transition-colors flex-shrink-0"
+              title="拖拽排序"
+              onClick={e => e.stopPropagation()}
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
+                <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
+                <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+              </svg>
+            </span>
+            <button
+              onClick={() => onSelectView(p.id)}
+              className={`flex-1 min-w-0 flex items-center gap-2.5 pr-2.5 py-2 rounded-lg text-left transition-colors ${
+                active ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+              <span className="flex-1 min-w-0 block text-[13px] truncate">{p.name}</span>
+              {count > 0 && (
+                <span className="text-[11px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{count}</span>
+              )}
+            </button>
+          </div>
+        )}
+      </Draggable>
+    );
+  };
+
+  const renderProjectDroppable = (droppableId: string, list: Project[]) => (
+    <Droppable droppableId={droppableId}>
+      {(provided) => (
+        <div ref={provided.innerRef} {...provided.droppableProps}>
+          {list.map((p, i) => renderProjectDraggable(p, i))}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
   );
 
   return (
@@ -87,10 +141,10 @@ export default function ProjectSidebar({
             {g.projects.length > 0 && (
               <div className="px-2.5 py-1 text-[10px] font-medium text-gray-400">{g.name}</div>
             )}
-            {g.projects.map(renderProject)}
+            {renderProjectDroppable(`sidebar-${g.id}`, g.projects)}
           </div>
         ))}
-        {ungrouped.map(renderProject)}
+        {renderProjectDroppable("sidebar-ungrouped", ungrouped)}
 
         {projects.length === 0 && (
           <div className="px-2.5 py-3 text-[12px] text-gray-300">还没有项目</div>

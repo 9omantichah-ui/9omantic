@@ -10,8 +10,6 @@ const STATUS_CONFIG = {
   completed: { label: "已完成", cls: "bg-emerald-100 text-emerald-600" },
 };
 
-const ZONE_NAME: Record<number, string> = { 0: "未整理", 1: "优先做", 2: "稍后做", 3: "晚点做" };
-
 export const TIME_SLOTS: { id: "morning" | "afternoon" | "evening"; name: string; icon: string; accent: string }[] = [
   { id: "morning", name: "上午", icon: "🌅", accent: "#f59e0b" },
   { id: "afternoon", name: "下午", icon: "☀️", accent: "#3b82f6" },
@@ -83,7 +81,9 @@ export default function DailyPlanSection({
                     {todo.task.name}
                   </span>
                 )}
-                {todo && <span className="text-[9px] px-1 py-[0.5px] rounded bg-gray-100 text-gray-400">{ZONE_NAME[todo.zone]}</span>}
+                {todo && !todo.project && (
+                  <span className="px-1.5 py-[1px] rounded text-[9px] font-medium bg-gray-100 text-gray-400">未分类</span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -137,7 +137,7 @@ export default function DailyPlanSection({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="flex flex-col gap-3">
         {TIME_SLOTS.map(slot => {
           const slotItems = planItems.filter(i => (i.timeSlot || "morning") === slot.id);
           return (
@@ -149,7 +149,7 @@ export default function DailyPlanSection({
                 </div>
                 <span className="text-[10px] text-gray-400 tabular-nums">{slotItems.length} 项</span>
               </div>
-              <div className="p-2 flex-1 overflow-y-auto max-h-[45vh] min-h-[8rem]">
+              <div className="p-2 flex-1 overflow-y-auto max-h-[32vh] min-h-[6rem]">
                 <Droppable droppableId={`plan-${slot.id}`}>
                   {(provided, snapshot) => (
                     <div

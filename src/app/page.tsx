@@ -155,6 +155,25 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
+  // 同分组内项目拖拽排序：groupId 为 null 表示未分组区。orderedIds 为该分组排序后的项目 id 列表
+  const handleReorderProjects = async (groupId: string | null, orderedIds: string[]) => {
+    const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
+    setProjects(prev => {
+      const affected = prev.filter(p => orderMap.has(p.id)).map(p => ({ ...p, order: orderMap.get(p.id)! }));
+      const others = prev.filter(p => !orderMap.has(p.id));
+      return [...affected, ...others].sort((a, b) => a.order - b.order);
+    });
+    if (groupId) {
+      setProjectGroups(prev => prev.map(g => g.id === groupId
+        ? { ...g, projects: [...g.projects].sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0)).map((p, i) => ({ ...p, order: i })) }
+        : g));
+    }
+    const items = orderedIds.map((id, i) => ({ id, order: i, groupId: groupId ?? null }));
+    try {
+      await fetch("/api/projects", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
+    } catch (e) { console.error(e); fetchProjects(); fetchProjectGroups(); }
+  };
+
   // 概览区：将待办移动到其他任务/项目（更新 taskId 与 projectId）
   const handleMoveTodo = async (todoId: string, projectId: string | null, taskId: string | null) => {
     setTodos(prev => prev.map(t => t.id === todoId ? { ...t, projectId, taskId, task: taskId ? (tasks.find(tk => tk.id === taskId) ? { id: taskId, name: tasks.find(tk => tk.id === taskId)!.name } : t.task) : null } : t));
@@ -227,6 +246,22 @@ export default function Home() {
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const srcId = result.source.droppableId, dstId = result.destination.droppableId;
+
+    // ── 左侧项目拖拽排序（仅同分组内） ──
+    if (srcId.startsWith("sidebar-")) {
+      if (srcId !== dstId) return; // 本轮仅支持同分组内排序
+      const groupKey = srcId.replace("sidebar-", "");
+      const groupId = groupKey === "ungrouped" ? null : groupKey;
+      const groupedIds = new Set(projectGroups.flatMap(g => g.projects.map(p => p.id)));
+      const listIds = groupId === null
+        ? projects.filter(p => !groupedIds.has(p.id)).map(p => p.id)
+        : (projectGroups.find(g => g.id === groupId)?.projects.map(p => p.id) ?? []);
+      const [moved] = listIds.splice(result.source.index, 1);
+      if (moved === undefined) return;
+      listIds.splice(result.destination.index, 0, moved);
+      handleReorderProjects(groupId, listIds);
+      return;
+    }
 
     // ── 当日计划相关拖拽 ──
     if (dstId.startsWith("plan-") || srcId.startsWith("plan-")) {
@@ -368,6 +403,7 @@ export default function Home() {
             selectedView={selectedView}
         onSelectView={setSelectedView}
             onCreateProject={(name) => handleCreateProject(name)}
+            onReorderProjects={handleReorderProjects}
           />
 
           {/* 中栏：今日引导 / 工作区 */}
@@ -388,8 +424,14 @@ export default function Home() {
                     planItems.map(item => (
                       <div key={item.id} className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border transition-colors ${item.status === "completed" ? "bg-green-50/50 border-green-100" : "bg-gray-50/60 border-gray-100"}`}>
                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${item.status === "completed" ? "bg-green-500" : item.status === "in_progress" ? "bg-blue-500" : "bg-gray-300"}`} />
-                        <span className={`flex-1 text-[13px] ${item.status === "completed" ? "line-through text-gray-400" : "text-gray-700"}`}>{item.todo?.title ?? "（待办已删除）"}</span>
-                        <span className="text-[10px] text-gray-400">{item.timeSlot === "morning" ? "上午" : item.timeSlot === "afternoon" ? "下午" : "晚上"}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className={`block text-[13px] ${item.status === "completed" ? "line-through text-gray-400" : "text-gray-700"}`}>{item.todo?.title ?? "（待办已删除）"}</span>
+                          <span className="block text-[11px] text-gray-400 mt-0.5 truncate">
+                            {item.todo?.project?.name ?? "未分类"}
+                            {item.todo?.task ? ` · ${item.todo.task.name}` : ""}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.timeSlot === "morning" ? "上午" : item.timeSlot === "afternoon" ? "下午" : "晚上"}</span>
                       </div>
                     ))
                   )}
