@@ -244,6 +244,14 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
+  // 概览区：将待办移动到其他任务/项目（更新 taskId 与 projectId）
+  const handleMoveTodo = async (todoId: string, projectId: string | null, taskId: string | null) => {
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, projectId, taskId, task: taskId ? (tasks.find(tk => tk.id === taskId) ? { id: taskId, name: tasks.find(tk => tk.id === taskId)!.name } : t.task) : null } : t));
+    try {
+      await fetch(`/api/todos/${todoId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, taskId }) });
+    } catch (e) { console.error(e); fetchTodos(); }
+  };
+
   const handleToggle = async (id: string, c: boolean) => {
     try { const r = await fetch(`/api/todos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: c }) });
       if (r.ok) { const u = await r.json(); setTodos(p => applyTodoUpdate(p, id, u)); }
@@ -535,7 +543,7 @@ export default function Home() {
         </DragDropContext>
 
         {/* ── 各项目情况概览 ── */}
-        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} tasks={tasks} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onCreateTask={handleCreateTask} onReorderProjects={handleReorderProjects} onUpdateProjectColor={handleUpdateProjectColor} />
+        <ProjectOverview todos={todos} projects={projects} projectGroups={projectGroups} tasks={tasks} onToggle={handleToggle} onQuickAdd={handleQuickAdd} onCreateTask={handleCreateTask} onReorderProjects={handleReorderProjects} onUpdateProjectColor={handleUpdateProjectColor} onMoveTodo={handleMoveTodo} />
       </div>
     </main>
   );
