@@ -17,10 +17,12 @@ interface ProjectWorkspaceProps {
   onAddToPlan: (todoId: string) => void;
   onQuickAdd: (projectId: string | null, title: string, taskId?: string | null) => void;
   onCreateTask: (projectId: string | null, name: string) => Promise<Task | null>;
+  onRenameProject?: (projectId: string, name: string) => void;
+  onRenameTask?: (taskId: string, name: string) => void;
 }
 
 export default function ProjectWorkspace({
-  project, todos, tasks, projects, onToggle, onUpdate, onDelete, onAddToPlan, onQuickAdd, onCreateTask,
+  project, todos, tasks, projects, onToggle, onUpdate, onDelete, onAddToPlan, onQuickAdd, onCreateTask, onRenameProject, onRenameTask,
 }: ProjectWorkspaceProps) {
   // 顶部操作栏内联表单状态
   const [addingTodo, setAddingTodo] = useState(false);
@@ -28,7 +30,12 @@ export default function ProjectWorkspace({
   const [newTodoTaskId, setNewTodoTaskId] = useState<string>(""); // "" = 未分类
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
-  const [showDone, setShowDone] = useState(false);
+  // 在某个任务(分类)�就地新增待办：值为 taskId 或 "none"
+  const [quickTaskId, setQuickTaskId] = useState<string | null>(null);
+  const [quickTitle, setQuickTitle] = useState("");
+  // 重命名：项目 or 任务
+  const [renaming, setRenaming] = useState<{ type: "project" | "task"; id: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const isInbox = project === null;
   const projectId = project?.id ?? null;
@@ -38,15 +45,38 @@ export default function ProjectWorkspace({
 
   // 分离已完成 / 未完成
   const pendingTodos = todos.filter(t => !t.completed);
-  const doneTodos = todos.filter(t => t.completed);
 
-  // 按分类分组（仅未完成）
+  // 按分类分组（每组内：未完成在前，已完成沉底）
   const byTask = new Map<string | null, Todo[]>();
-  pendingTodos.forEach(t => {
+  const pushGrouped = (t: Todo) => {
     const key = t.taskId ?? null;
     if (!byTask.has(key)) byTask.set(key, []);
     byTask.get(key)!.push(t);
-  });
+  };
+  todos.forEach(t => { if (!t.completed) pushGrouped(t); });
+  todos.forEach(t => { if (t.completed) pushGrouped(t); });
+
+  const submitQuickTask = () => {
+    const title = quickTitle.trim();
+    if (!title) { setQuickTaskId(null); setQuickTitle(""); return; }
+    onQuickAdd(projectId, title, quickTaskId === "none" ? null : quickTaskId);
+    setQuickTitle("");
+  };
+
+  const startRename = (type: "project" | "task", id: string, cur: string) => {
+    setRenaming({ type, id });
+    setRenameValue(cur);
+  };
+  const submitRename = () => {
+    if (!renaming) return;
+    const v = renameValue.trim();
+    if (v) {
+      if (renaming.type === "project") onRenameProject?.(renaming.id, v);
+      else onRenameTask?.(renaming.id, v);
+    }
+    setRenaming(null);
+    setRenameValue("");
+  };
 
   const submitCreateTask = async () => {
     const name = newTaskName.trim();
@@ -90,25 +120,72 @@ export default function ProjectWorkspace({
   );
 
   // 轻量分类标题栏 + 列表行
-  const renderSection = (name: string, list: Todo[], droppableId: string, isTask = true) => {
+  const renderSection = (name: string, list: Todo[], droppableId: string, isTask = true, taskId?: string) => {
     const accent = project?.color ?? "#94a3b8";
     const done = list.filter(t => t.completed).length;
+    const isRenaming = isTask && taskId && renaming?.type === "task" && renaming.id === taskId;
+    const quickKey = taskId ?? "none";
     return (
       <div className="mb-3">
         {isTask ? (
           <div
-            className="flex items-center gap-2 pl-2.5 pr-2 py-1.5 mb-1.5 rounded-md border-l-[3px] bg-gray-50/70"
+            className="group/section flex items-center gap-2 pl-2.5 pr-2 py-1.5 mb-1.5 rounded-md border-l-[3px] bg-gray-50/70"
             style={{ borderLeftColor: accent }}
           >
-            <span className="text-[13px] font-semibold text-gray-800 truncate">{name}</span>
+            {isRenaming ? (
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onBlur={submitRename}
+                onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submitRename(); if (e.key === "Escape") setRenaming(null); }}
+                className="flex-1 px-1.5 py-0.5 bg-white border border-blue-300 rounded text-[13px] font-semibold focus:outline-none"
+              />
+            ) : (
+              <span
+                className="text-[13px] font-semibold text-gray-800 truncate cursor-text"
+                title="双击重命名"
+                onDoubleClick={() => taskId && startRename("task", taskId, name)}
+              >
+                {name}
+              </span>
+            )}
             <span className="text-[11px] text-gray-400 tabular-nums flex-shrink-0">
               {done > 0 ? `${done}/${list.length}` : list.length}
             </span>
+            <button
+              onClick={() => { setQuickTaskId(quickKey); setQuickTitle(""); }}
+              className="ml-auto opacity-0 group-hover/section:opacity-100 w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+              title="在此分类下添加待办"
+            >
+              ＋
+            </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 px-1 pb-1">
+          <div className="group/section flex items-center gap-2 px-1 pb-1">
             <span className="text-[12px] font-medium text-gray-400">{name}</span>
             <span className="text-[11px] text-gray-300">{list.length}</span>
+            <button
+              onClick={() => { setQuickTaskId(quickKey); setQuickTitle(""); }}
+              className="ml-auto opacity-0 group-hover/section:opacity-100 w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+              title="在未分类下添加待办"
+            >
+              ＋
+            </button>
+          </div>
+        )}
+        {quickTaskId === quickKey && (
+          <div className={`flex items-center gap-2 mb-1.5 ${isTask ? "pl-2.5" : ""}`}>
+            <input
+              autoFocus
+              value={quickTitle}
+              onChange={e => setQuickTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submitQuickTask(); if (e.key === "Escape") { setQuickTaskId(null); setQuickTitle(""); } }}
+              placeholder="待办内容，回车添加…"
+              className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:border-blue-400"
+            />
+            <button onClick={submitQuickTask} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-medium hover:bg-blue-500">添加</button>
+            <button onClick={() => { setQuickTaskId(null); setQuickTitle(""); }} className="text-[12px] text-gray-400">取消</button>
           </div>
         )}
         <div className={isTask ? "pl-2.5" : ""}>
@@ -124,7 +201,24 @@ export default function ProjectWorkspace({
       <div className="px-5 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
           {project && <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: project.color }} />}
-          <h1 className="text-lg font-bold text-gray-900 truncate">{isInbox ? "收件箱" : project!.name}</h1>
+          {!isInbox && renaming?.type === "project" && renaming.id === project!.id ? (
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onBlur={submitRename}
+              onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submitRename(); if (e.key === "Escape") setRenaming(null); }}
+              className="text-lg font-bold text-gray-900 px-1.5 py-0.5 bg-white border border-blue-300 rounded focus:outline-none min-w-0 flex-1"
+            />
+          ) : (
+            <h1
+              className="text-lg font-bold text-gray-900 truncate cursor-text"
+              title={isInbox ? undefined : "双击重命名"}
+              onDoubleClick={() => { if (!isInbox) startRename("project", project!.id, project!.name); }}
+            >
+              {isInbox ? "收件箱" : project!.name}
+            </h1>
+          )}
         </div>
         <p className="text-[12px] text-gray-400 mt-1">
           {isInbox ? "暂未归属项目的待办，集中在这里快速整理" :`${pendingTodos.length} 项待办进行中`}
@@ -189,32 +283,11 @@ export default function ProjectWorkspace({
           renderTodoList(byTask.get(null) ?? [], "ws-inbox")
         ) : (
           <>
-            {/* 各分类分组（仅未完成） */}
-            {projectTasks.map(task => renderSection(task.name, byTask.get(task.id) ?? [], `ws-task-${task.id}`))}
-            {/* 未分类（仅未完成） */}
+            {/* 各分类分组（未完成在前，已完成沉底） */}
+            {projectTasks.map(task => renderSection(task.name, byTask.get(task.id) ?? [], `ws-task-${task.id}`, true, task.id))}
+            {/* 未分类 */}
             {renderSection("未分类", byTask.get(null) ?? [], "ws-task-none", false)}
           </>
-        )}
-
-        {/* 统一已完成折叠区 */}
-        {doneTodos.length > 0 && (
-          <div className="mt-3 pt-2 border-t border-gray-100">
-            <button onClick={() => setShowDone(v => !v)}
-              className="flex items-center gap-1.5 px-1 py-1 text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors">
-              <svg className={`w-3 h-3 transition-transform ${showDone ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              已完成（{doneTodos.length}）
-            </button>
-            {showDone && (
-              <div className="py-1 space-y-0.5">
-                {doneTodos.map(todo => (
-                  <TodoItem key={todo.id} todo={todo} projects={projects} compact
-                    onToggle={onToggle} onUpdate={onUpdate} onDelete={onDelete} />
-                ))}
-              </div>
-            )}
-          </div>
         )}
       </div>
     </section>

@@ -53,6 +53,8 @@ export default function TodayView({ planItems, projects, tasks, onUpdateStatus, 
       }
       map.get(pid)!.items.push(item);
     });
+    // 组内：已完成沉底
+    map.forEach(g => g.items.sort((a, b) => (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0)));
     // 未分类组排最后
     return [...map.values()].sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : 0));
   }, [planItems]);

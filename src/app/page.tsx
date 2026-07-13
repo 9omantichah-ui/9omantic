@@ -156,6 +156,28 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
+  // 重命名项目
+  const handleRenameProject = async (projectId: string, name: string) => {
+    const t = name.trim();
+    if (!t) return;
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name: t } : p));
+    try {
+      await fetch(`/api/projects/${projectId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: t }) });
+      fetchTodos();
+    } catch (e) { console.error(e); fetchProjects(); }
+  };
+
+  // 重命名任务/分类
+ const handleRenameTask = async (taskId: string, name: string) => {
+    const t = name.trim();
+    if (!t) return;
+    setTasks(prev => prev.map(tk => tk.id === taskId ? { ...tk, name: t } : tk));
+    setTodos(prev => prev.map(td => td.task?.id === taskId ? { ...td, task: { ...td.task!, name: t } } : td));
+    try {
+      await fetch(`/api/tasks/${taskId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: t }) });
+    } catch (e) { console.error(e); fetchTasks(); }
+  };
+
   // 同分组内项目拖拽排序：groupId 为 null 表示未分组区。orderedIds 为该分组排序后的项目 id 列表
   const handleReorderProjects = async (groupId: string | null, orderedIds: string[]) => {
     const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
@@ -447,6 +469,8 @@ export default function Home() {
          onAddToPlan={handleAddToPlan}
                 onQuickAdd={handleQuickAdd}
                 onCreateTask={handleCreateTask}
+                onRenameProject={handleRenameProject}
+                onRenameTask={handleRenameTask}
               />
             )}
           </div>

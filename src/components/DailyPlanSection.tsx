@@ -85,7 +85,8 @@ export default function DailyPlanSection({
 
       <div className="flex flex-col gap-3">
         {TIME_SLOTS.map(slot => {
-          const slotItems = planItems.filter(i => (i.timeSlot || "morning") === slot.id);
+          const slotItems = planItems.filter(i => (i.timeSlot || "morning") === slot.id)
+            .sort((a, b) => (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0));
           return (
             <div key={slot.id} className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
               <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
