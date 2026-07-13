@@ -15,6 +15,8 @@ interface ProjectSidebarProps {
   onSelectView: (view: SidebarView) => void;
   onCreateProject: (name: string) => void;
   onReorderProjects: (groupId: string | null, orderedIds: string[]) => void;
+  onRenameProject: (projectId: string, name: string) => void;
+  onDeleteProject: (projectId: string) => void;
 }
 
 // 计算某项目下未完成待办数
@@ -23,10 +25,12 @@ function pendingCount(todos: Todo[], projectId: string | null): number {
 }
 
 export default function ProjectSidebar({
-  todos, projects, projectGroups, planCount, selectedView, onSelectView, onCreateProject,
+  todos, projects, projectGroups, planCount, selectedView, onSelectView, onCreateProject, onRenameProject, onDeleteProject,
 }: ProjectSidebarProps) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   const inboxCount = pendingCount(todos, null);
   const allCount = todos.filter(t => !t.completed).length;
@@ -41,6 +45,17 @@ export default function ProjectSidebar({
     onCreateProject(name);
     setNewName("");
     setCreating(false);
+  };
+
+  const startEdit = (p: Project) => { setEditingId(p.id); setEditName(p.name); };
+  const submitEdit = () => {
+    if (editingId) { const t = editName.trim(); if (t) onRenameProject(editingId, t); }
+    setEditingId(null); setEditName("");
+  };
+  const confirmDelete = (p: Project) => {
+    if (window.confirm(`删除项目「${p.name}」？该项目下的待办及计划引用将一并删除，此操作不可撤销。`)) {
+      onDeleteProject(p.id);
+    }
   };
 
   const NavItem = ({ view, dot, icon, name, meta, count }: {
@@ -76,6 +91,7 @@ export default function ProjectSidebar({
   const renderProjectDraggable = (p: Project, index: number) => {
     const active = selectedView === p.id;
     const count = pendingCount(todos, p.id);
+    const editing = editingId === p.id;
     return (
       <Draggable key={p.id} draggableId={`proj-${p.id}`} index={index}>
         {(prov, snap) => (
@@ -99,18 +115,43 @@ export default function ProjectSidebar({
                 <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
               </svg>
             </span>
-            <button
-              onClick={() => onSelectView(p.id)}
-              className={`flex-1 min-w-0 flex items-center gap-2.5 pr-2.5 py-2 rounded-lg text-left transition-colors ${
-                active ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
-              <span className="flex-1 min-w-0 block text-[13px] truncate">{p.name}</span>
-              {count > 0 && (
-                <span className="text-[11px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{count}</span>
-              )}
-            </button>
+            {editing ? (
+              <input
+                autoFocus
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                onBlur={submitEdit}
+                onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submitEdit(); if (e.key === "Escape") { setEditingId(null); setEditName(""); } }}
+                className="flex-1 min-w-0 px-2 py-1.5 mr-1.5 bg-white border border-blue-400 rounded-lg text-[13px] focus:outline-none"
+              />
+            ) : (
+              <>
+                <button
+                  onClick={() => onSelectView(p.id)}
+                  className={`flex-1 min-w-0 flex items-center gap-2.5 pr-2.5 py-2 rounded-lg text-left transition-colors ${
+                    active ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                  <span className="flex-1 min-w-0 block text-[13px] truncate">{p.name}</span>
+                  {count > 0 && (
+                    <span className="text-[11px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{count}</span>
+                  )}
+                </button>
+                <div className="flex items-center gap-0.5 pr-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                  <button onClick={e => { e.stopPropagation(); startEdit(p); }} className="p-1 text-gray-300 hover:text-blue-600 rounded" title="重命名">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); confirmDelete(p); }} className="p-1 text-gray-300 hover:text-red-500 rounded" title="删除">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </Draggable>

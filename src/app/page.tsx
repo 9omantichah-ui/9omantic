@@ -173,6 +173,17 @@ export default function Home() {
     } catch (e) { console.error(e); fetchProjects(); }
   };
 
+  const handleDeleteProject = async (projectId: string) => {
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+    if (selectedView === projectId) setSelectedView("today");
+    try {
+      await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+      fetchTodos();
+      fetchProjectGroups();
+      fetchPlan();
+    } catch (e) { console.error(e); fetchProjects(); }
+  };
+
   // 重命名任务/分类
  const handleRenameTask = async (taskId: string, name: string) => {
     const t = name.trim();
@@ -509,6 +520,8 @@ export default function Home() {
         onSelectView={setSelectedView}
             onCreateProject={(name) => handleCreateProject(name)}
             onReorderProjects={handleReorderProjects}
+            onRenameProject={handleRenameProject}
+            onDeleteProject={handleDeleteProject}
           />
 
           {/* 中栏：今日引导 / 工作区 */}
