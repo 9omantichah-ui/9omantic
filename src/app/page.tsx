@@ -498,7 +498,7 @@ export default function Home() {
 
       {/* ── 三栏工作区 ── */}
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex-1 grid grid-cols-[244px_1fr_388px] gap-4 p-4 min-h-0">
+        <div className={`flex-1 grid ${isProjectView ? "grid-cols-[244px_1fr_388px]" : "grid-cols-[244px_1fr]"} gap-4 p-4 min-h-0`}>
           {/* 左栏：项目导航 */}
           <ProjectSidebar
             todos={todos}
@@ -551,20 +551,22 @@ export default function Home() {
             )}
           </div>
 
-          {/* 右栏：当日计划（固定） */}
-          <div className="min-w-0 h-full overflow-y-auto">
-            <DailyPlanSection
-              todos={todos}
-              projects={projects}
-              planItems={planItems}
-              selectedDate={planDate}
-              onNavigateDate={navigatePlanDate}
-              onSetToday={setPlanToday}
-              onUpdateStatus={handleUpdatePlanStatus}
-              onRemove={handleRemovePlan}
-              onAddToPlan={handleAddToPlanSlot}
-            />
-          </div>
+          {/* 右栏：当日计划（仅项目视图显示，作为快速收纳区） */}
+          {isProjectView && (
+            <div className="min-w-0 h-full overflow-y-auto">
+              <DailyPlanSection
+                todos={todos}
+                projects={projects}
+                planItems={planItems}
+                selectedDate={planDate}
+                onNavigateDate={navigatePlanDate}
+                onSetToday={setPlanToday}
+                onUpdateStatus={handleUpdatePlanStatus}
+                onRemove={handleRemovePlan}
+                onAddToPlan={handleAddToPlanSlot}
+              />
+            </div>
+          )}
         </div>
       </DragDropContext>
     </main>
