@@ -36,6 +36,14 @@ export default function ProjectWorkspace({
   // 重命名：项目 or 任务
   const [renaming, setRenaming] = useState<{ type: "project" | "task"; id: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  // 各分组的「已完成」折叠区展开状态：key = taskId 或 "none"
+  const [expandedDone, setExpandedDone] = useState<Set<string>>(new Set());
+  const toggleDone = (key: string) =>
+    setExpandedDone(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
 
   const isInbox = project === null;
   const projectId = project?.id ?? null;
@@ -46,15 +54,14 @@ export default function ProjectWorkspace({
   // 分离已完成 / 未完成
   const pendingTodos = todos.filter(t => !t.completed);
 
-  // 按分类分组（每组内：未完成在前，已完成沉底）
+  // 按分类分组（保留组内全部待办，渲染时再分离已完成到折叠区）
   const byTask = new Map<string | null, Todo[]>();
   const pushGrouped = (t: Todo) => {
     const key = t.taskId ?? null;
     if (!byTask.has(key)) byTask.set(key, []);
     byTask.get(key)!.push(t);
   };
-  todos.forEach(t => { if (!t.completed) pushGrouped(t); });
-  todos.forEach(t => { if (t.completed) pushGrouped(t); });
+  todos.forEach(t => pushGrouped(t));
 
   const submitQuickTask = () => {
     const title = quickTitle.trim();
@@ -122,9 +129,12 @@ export default function ProjectWorkspace({
   // 轻量分类标题栏 + 列表行
   const renderSection = (name: string, list: Todo[], droppableId: string, isTask = true, taskId?: string) => {
     const accent = project?.color ?? "#94a3b8";
-    const done = list.filter(t => t.completed).length;
+    const pending = list.filter(t => !t.completed);
+    const doneList = list.filter(t => t.completed);
+    const done = doneList.length;
     const isRenaming = isTask && taskId && renaming?.type === "task" && renaming.id === taskId;
     const quickKey = taskId ?? "none";
+    const doneOpen = expandedDone.has(quickKey);
     return (
       <div className="mb-3">
         {isTask ? (
@@ -189,7 +199,25 @@ export default function ProjectWorkspace({
           </div>
         )}
         <div className={isTask ? "pl-2.5" : ""}>
-          {renderTodoList(list, droppableId)}
+          {renderTodoList(pending, droppableId)}
+          {done > 0 && (
+            <div className="mt-1">
+              <button
+                onClick={() => toggleDone(quickKey)}
+                className="flex items-center gap-1 px-1 py-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className={`w-3 h-3 transition-transform ${doneOpen ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                已完成 {done}
+              </button>
+              {doneOpen && (
+                <div className="opacity-70">
+                  {renderTodoList(doneList, `${droppableId}-done`)}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -280,10 +308,36 @@ export default function ProjectWorkspace({
       {/* 待办列表 */}
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {isInbox ? (
-          renderTodoList(byTask.get(null) ?? [], "ws-inbox")
+          (() => {
+            const list = byTask.get(null) ?? [];
+            const pending = list.filter(t => !t.completed);
+            const doneList = list.filter(t => t.completed);
+            const doneOpen = expandedDone.has("ws-inbox");
+            return (
+              <>
+                {renderTodoList(pending, "ws-inbox")}
+                {doneList.length > 0 && (
+                  <div className="mt-1">
+                    <button
+                      onClick={() => toggleDone("ws-inbox")}
+                      className="flex items-center gap-1 px-1 py-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <svg className={`w-3 h-3 transition-transform ${doneOpen ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      已完成 {doneList.length}
+                    </button>
+                    {doneOpen && (
+                      <div className="opacity-70">{renderTodoList(doneList, "ws-inbox-done")}</div>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()
         ) : (
           <>
-            {/* 各分类分组（未完成在前，已完成沉底） */}
+            {/* 各分类分组（未完成直接展示，已完成折叠） */}
             {projectTasks.map(task => renderSection(task.name, byTask.get(task.id) ?? [], `ws-task-${task.id}`, true, task.id))}
             {/* 未分类 */}
             {renderSection("未分类", byTask.get(null) ?? [], "ws-task-none", false)}

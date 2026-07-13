@@ -13,6 +13,7 @@ interface TodayViewProps {
   onRemove: (itemId: string) => void;
   // 今日快捷新增：创建待办并加入当日计划
   onQuickAddToday: (title: string, projectId: string | null, taskId: string | null, timeSlot: "morning" | "afternoon" | "evening") => void;
+  onDeferToTomorrow: (itemId: string) => void;
 }
 
 const SLOTS: { id: "morning" | "afternoon" | "evening"; name: string }[] = [
@@ -29,7 +30,7 @@ interface Group {
   items: DailyPlanItem[];
 }
 
-export default function TodayView({ planItems, projects, tasks, onUpdateStatus, onRemove, onQuickAddToday }: TodayViewProps) {
+export default function TodayView({ planItems, projects, tasks, onUpdateStatus, onRemove, onQuickAddToday, onDeferToTomorrow }: TodayViewProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState<string>("");
@@ -145,7 +146,7 @@ export default function TodayView({ planItems, projects, tasks, onUpdateStatus, 
                           <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
                             className="cursor-grab active:cursor-grabbing">
                             <PlanTaskCard item={item} showSlot dragging={snap.isDragging}
-                              onUpdateStatus={onUpdateStatus} onRemove={onRemove} />
+                              onUpdateStatus={onUpdateStatus} onRemove={onRemove} onDeferToTomorrow={onDeferToTomorrow} />
                           </div>
                         )}
                       </Draggable>

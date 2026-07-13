@@ -283,6 +283,20 @@ export default function Home() {
     } catch (e) { console.error(e); fetchPlan(); }
   };
 
+  // 把当日计划中的一条待办顺延到明日（从当前日期移除，加入次日同时段）
+  const handleDeferToTomorrow = async (itemId: string) => {
+    const cur = planItems.find(i => i.id === itemId);
+    if (!cur || !cur.todoId) return;
+    const d = new Date(planDate);
+    d.setDate(d.getDate() + 1);
+    const nextDate = d.toISOString().split("T")[0];
+    setPlanItems(prev => prev.filter(i => i.id !== itemId));
+    try {
+      await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId: cur.todoId, date: nextDate, timeSlot: cur.timeSlot }) });
+      await fetch(`/api/daily-plan/${itemId}`, { method: "DELETE" });
+    } catch (e) { console.error(e); fetchPlan(); }
+  };
+
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const srcId = result.source.droppableId, dstId = result.destination.droppableId;
@@ -456,6 +470,7 @@ export default function Home() {
                 onUpdateStatus={handleUpdatePlanStatus}
                 onRemove={handleRemovePlan}
                 onQuickAddToday={handleQuickAddToday}
+                onDeferToTomorrow={handleDeferToTomorrow}
               />
             ) : (
               <ProjectWorkspace

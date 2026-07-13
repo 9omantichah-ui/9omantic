@@ -8,6 +8,8 @@ interface PlanTaskCardProps {
   showSlot?: boolean;
   onUpdateStatus?: (itemId: string, status: string) => void;
   onRemove?: (itemId: string) => void;
+  // 顺延到明日（仅今日视图提供）
+  onDeferToTomorrow?: (itemId: string) => void;
   // 传入 dragHandle 相关 props 时整卡可拖拽
   dragging?: boolean;
 }
@@ -15,7 +17,7 @@ interface PlanTaskCardProps {
 const SLOT_LABEL: Record<string, string> = { morning: "上午", afternoon: "下午", evening: "晚上" };
 
 // 今日视图与当日计划区共用的待办卡片，格式以今日视图为准
-export default function PlanTaskCard({ item, showSlot, onUpdateStatus, onRemove, dragging }: PlanTaskCardProps) {
+export default function PlanTaskCard({ item, showSlot, onUpdateStatus, onRemove, onDeferToTomorrow, dragging }: PlanTaskCardProps) {
   const todo = item.todo;
   const isDone = item.status === "completed";
 
@@ -66,6 +68,14 @@ export default function PlanTaskCard({ item, showSlot, onUpdateStatus, onRemove,
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0" onMouseDown={e => e.stopPropagation()}>
+        {onDeferToTomorrow && !isDone && (
+          <button onClick={() => onDeferToTomorrow(item.id)} onMouseDown={e => e.stopPropagation()}
+            className="p-0.5 text-gray-300 hover:text-blue-500 transition-colors" title="顺延到明日">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
         {onRemove && (
           <button onClick={() => onRemove(item.id)} onMouseDown={e => e.stopPropagation()}
             className="p-0.5 text-gray-300 hover:text-red-500 transition-colors" title="移出计划">
