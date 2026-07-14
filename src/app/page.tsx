@@ -261,8 +261,13 @@ export default function Home() {
   };
 
   const handleToggle = async (id: string, c: boolean) => {
+    // 同步当日计划中相同待办的状态
+    setPlanItems(prev => prev.map(i => i.todoId === id ? { ...i, status: (c ? "completed" : "pending") as DailyPlanItem["status"] } : i));
     try { const r = await fetch(`/api/todos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: c }) });
       if (r.ok) { const u = await r.json(); setTodos(p => applyTodoUpdate(p, id, u)); }
+      // 持久化计划项状态
+      const planItem = planItems.find(i => i.todoId === id);
+      if (planItem) { await fetch("/api/daily-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: planItem.id, status: c ? "completed" : "pending" }] }) }); }
     } catch (e) { console.error(e); }
   };
   const handleUpdate = async (id: string, data: Record<string, unknown>) => {
@@ -345,9 +350,20 @@ export default function Home() {
   };
 
   const handleUpdatePlanStatus = async (itemId: string, status: string) => {
+    const item = planItems.find(i => i.id === itemId);
+    const completed = status === "completed";
+    // 乐观更新：计划项状态 + 对应待办完成状态
     setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, status: status as DailyPlanItem["status"] } : i));
+    if (item?.todoId) {
+      setTodos(prev => prev.map(t => t.id === item.todoId ? { ...t, completed, completedAt: completed ? new Date().toISOString() : null } : t));
+    }
     try {
       await fetch("/api/daily-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: itemId, status }] }) });
+      // 同步待办完成状态,让项目视图/待办列表保持一致
+      if (item?.todoId) {
+        const r = await fetch(`/api/todos/${item.todoId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed }) });
+        if (r.ok) { const u = await r.json(); setTodos(p => applyTodoUpdate(p, item.todoId!, u)); }
+      }
     } catch (e) { console.error(e); fetchPlan(); }
   };
 
