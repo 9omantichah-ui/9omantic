@@ -42,6 +42,9 @@ export default function Home() {
   const [planItems, setPlanItems] = useState<DailyPlanItem[]>([]);
   const [planDate, setPlanDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [selectedView, setSelectedView] = useState<SidebarView>("today");
+  // 全局「已安排」todoId 集合（跨日期、跨状态），来源 /api/scheduled-todo-ids
+  // 用于 AllTodosView「未安排 Tab」判定，避免只看当日 planItems 造成的错误判定
+  const [scheduledIds, setScheduledIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(data => {
@@ -292,6 +295,19 @@ export default function Home() {
 
   useEffect(() => { if (user) fetchPlan(); }, [fetchPlan, user]);
 
+  // 拉取「所有被安排过的 todoId 集合」（跨日期、跨状态），供未安排 Tab 判定使用
+  const fetchScheduledIds = useCallback(async () => {
+    if (!user) return;
+    try {
+      const r = await fetch("/api/scheduled-todo-ids");
+      if (!r.ok) return;
+      const data = await r.json();
+      if (Array.isArray(data.ids)) setScheduledIds(new Set(data.ids as string[]));
+    } catch (e) { console.error(e); }
+  }, [user]);
+
+  useEffect(() => { if (user) fetchScheduledIds(); }, [fetchScheduledIds, user]);
+
   const navigatePlanDate = (offset: number) => {
     const d = new Date(planDate);
     d.setDate(d.getDate() + offset);
@@ -313,6 +329,7 @@ export default function Home() {
     try {
       const r = await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId, date: planDate, timeSlot }) });
       if (!r.ok) throw new Error(await r.text());
+      setScheduledIds(prev => { const n = new Set(prev); n.add(todoId); return n; });
       fetchPlan();
     } catch (e) {
       console.error(e);
@@ -335,26 +352,11 @@ export default function Home() {
         body: JSON.stringify({ todoId, date, timeSlot }),
       });
       if (!r.ok) { const err = await r.text(); alert(`安排失败 (${r.status}): ${err}`); return; }
-      // 若安排到当前日期，直接刷新计划列表；否则也刷新（planItems 状态用于「未安排」判定）
+      // 立即将该 todoId 加入全局已安排集合，让「未安排 Tab」即刻更新（不受当日 planItems 覆盖影响）
+      setScheduledIds(prev => { const n = new Set(prev); n.add(todoId); return n; });
+      // 刷新当日 planItems（若安排的是当日）
       fetchPlan();
-      // 如果安排到的日期就是当前 planDate，等待 fetchPlan 完成；否则手动补一条乐观项到 planItems 用于未安排过滤
-      if (date !== planDate) {
-        const todo = todos.find(t => t.id === todoId);
-        if (todo) {
-          const optimistic = {
-            id: `scheduled-${todoId}-${date}`,
-            planId: "",
-            todoId,
-            order: 0,
-            status: "pending",
-            timeSlot,
-            userId: "",
-            createdAt: new Date().toISOString(),
-            todo,
-          } as unknown as DailyPlanItem;
-          setPlanItems(prev => prev.some(i => i.todoId === todoId) ? prev : [...prev, optimistic]);
-        }
-      }
+      // 已由 scheduledIds 承担「跨日期已安排」判定，不再往 planItems 塞跨日期的乐观项
     } catch (e) { console.error(e); alert("网络错误，请检查连接"); }
   };
 
@@ -371,6 +373,7 @@ export default function Home() {
       setTodos(p => [...p, n]);
       // 加入当日计划
       await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId: n.id, date: planDate, timeSlot }) });
+      setScheduledIds(prev => { const nx = new Set(prev); nx.add(n.id); return nx; });
       fetchPlan();
     } catch (e) { console.error(e); alert("网络错误，请检查连接"); }
   };
@@ -379,6 +382,8 @@ export default function Home() {
     setPlanItems(prev => prev.filter(i => i.id !== itemId));
     try {
       await fetch(`/api/daily-plan/${itemId}`, { method: "DELETE" });
+      // 该 todoId 可能已完全脱离所有计划，刷新全局已安排集合
+      fetchScheduledIds();
     } catch (e) { console.error(e); fetchPlan(); }
   };
 
@@ -628,6 +633,7 @@ export default function Home() {
                 todos={todos}
                 projects={projects}
                 planItems={planItems}
+                scheduledIds={scheduledIds}
                 onToggle={handleToggle}
                 onUpdate={handleUpdate}
                 onDelete={handleDelete}
