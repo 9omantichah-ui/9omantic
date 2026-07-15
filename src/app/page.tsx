@@ -325,6 +325,39 @@ export default function Home() {
     await handleAddToPlanSlot(todoId, "morning");
   };
 
+  // 快速安排：把一条待办安排到指定日期的指定时段（供「未安排」Tab 使用）
+  // 与 handleAddToPlanSlot 的区别是可指定任意日期，不限于当前 planDate
+  const handleQuickSchedule = async (todoId: string, date: string, timeSlot: "morning" | "afternoon" | "evening") => {
+    try {
+      const r = await fetch("/api/daily-plan", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ todoId, date, timeSlot }),
+      });
+      if (!r.ok) { const err = await r.text(); alert(`安排失败 (${r.status}): ${err}`); return; }
+      // 若安排到当前日期，直接刷新计划列表；否则也刷新（planItems 状态用于「未安排」判定）
+      fetchPlan();
+      // 如果安排到的日期就是当前 planDate，等待 fetchPlan 完成；否则手动补一条乐观项到 planItems 用于未安排过滤
+      if (date !== planDate) {
+        const todo = todos.find(t => t.id === todoId);
+        if (todo) {
+          const optimistic = {
+            id: `scheduled-${todoId}-${date}`,
+            planId: "",
+            todoId,
+            order: 0,
+            status: "pending",
+            timeSlot,
+            userId: "",
+            createdAt: new Date().toISOString(),
+            todo,
+          } as unknown as DailyPlanItem;
+          setPlanItems(prev => prev.some(i => i.todoId === todoId) ? prev : [...prev, optimistic]);
+        }
+      }
+    } catch (e) { console.error(e); alert("网络错误，请检查连接"); }
+  };
+
   // 今日视图快捷新增：先创建待办（默认进未整理区），再加入当日计划指定时段
   const handleQuickAddToday = async (title: string, projectId: string | null, taskId: string | null, timeSlot: "morning" | "afternoon" | "evening") => {
     if (!title.trim()) return;
@@ -594,11 +627,13 @@ export default function Home() {
               <AllTodosView
                 todos={todos}
                 projects={projects}
+                planItems={planItems}
                 onToggle={handleToggle}
                 onUpdate={handleUpdate}
                 onDelete={handleDelete}
                 onAddToPlan={handleAddToPlan}
                 onSelectProject={setSelectedView}
+                onQuickSchedule={handleQuickSchedule}
               />
             ) : (
               <ProjectWorkspace

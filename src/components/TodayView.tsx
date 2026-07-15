@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Droppable, Draggable } from "@hello-pangea/dnd";
 import { Project, Task, DailyPlanItem } from "@/lib/types";
 import PlanTaskCard from "./PlanTaskCard";
@@ -14,22 +14,25 @@ interface TodayViewProps {
   onSetToday: () => void;
   onUpdateStatus: (itemId: string, status: string) => void;
   onRemove: (itemId: string) => void;
-  // 今日快捷新增：创建待办并加入当日计划
   onQuickAddToday: (title: string, projectId: string | null, taskId: string | null, timeSlot: "morning" | "afternoon" | "evening") => void;
   onDeferToTomorrow: (itemId: string) => void;
 }
 
-const SLOTS: { id: "morning" | "afternoon" | "evening"; name: string; icon: string; accent: string }[] = [
+type SlotId = "morning" | "afternoon" | "evening";
+
+const SLOTS: { id: SlotId; name: string; icon: string; accent: string }[] = [
   { id: "morning", name: "上午", icon: "🌅", accent: "#f59e0b" },
   { id: "afternoon", name: "下午", icon: "☀️", accent: "#3b82f6" },
   { id: "evening", name: "晚上", icon: "🌙", accent: "#8b5cf6" },
 ];
 
 export default function TodayView({ planItems, projects, tasks, selectedDate, onNavigateDate, onSetToday, onUpdateStatus, onRemove, onQuickAddToday, onDeferToTomorrow }: TodayViewProps) {
-  const [addingSlot, setAddingSlot] = useState<"morning" | "afternoon" | "evening" | null>(null);
+  const [addingSlot, setAddingSlot] = useState<SlotId | null>(null);
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState<string>("");
   const [taskId, setTaskId] = useState<string>("");
+  // 每时段已完成区默认折叠
+  const [expandedDone, setExpandedDone] = useState<Record<SlotId, boolean>>({ morning: false, afternoon: false, evening: false });
 
   const projectTasks = tasks.filter(t => t.projectId === (projectId || null));
 
@@ -40,10 +43,29 @@ export default function TodayView({ planItems, projects, tasks, selectedDate, on
     return `${d.getMonth() + 1}月${d.getDate()}日 ${w}`;
   })();
 
-  const total = planItems.length;
-  const done = planItems.filter(i => i.status === "completed").length;
+  // 派生分时段数据 + 概览
+  const bySlot = useMemo(() => {
+    const map: Record<SlotId, { pending: DailyPlanItem[]; done: DailyPlanItem[] }> = {
+      morning: { pending: [], done: [] },
+      afternoon: { pending: [], done: [] },
+      evening: { pending: [], done: [] },
+    };
+    for (const item of planItems) {
+      const slot: SlotId = (item.timeSlot as SlotId) || "morning";
+      if (item.status === "completed") map[slot].done.push(item);
+      else map[slot].pending.push(item);
+    }
+    (["morning", "afternoon", "evening"] as SlotId[]).forEach(s => {
+      map[s].pending.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      map[s].done.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    });
+    return map;
+  }, [planItems]);
 
-  const submit = (slot: "morning" | "afternoon" | "evening") => {
+  const total = planItems.length;
+  const doneCount = planItems.filter(i => i.status === "completed").length;
+
+  const submit = (slot: SlotId) => {
     const t = title.trim();
     if (!t) { setAddingSlot(null); return; }
     onQuickAddToday(t, projectId || null, taskId || null, slot);
@@ -57,7 +79,11 @@ export default function TodayView({ planItems, projects, tasks, selectedDate, on
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-2">
             <h1 className="text-lg font-bold text-gray-900">{isToday ? "今日" : dateLabel}</h1>
-            {total > 0 && <span className="text-[12px] text-gray-400 tabular-nums">{done}/{total} 已完成</span>}
+            {total > 0 && (
+              <span className="text-[12px] text-gray-400 tabular-nums">
+                {total}项 · 已完成 {doneCount}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             <button onClick={() => onNavigateDate(-1)} className="p-1 text-gray-400 hover:text-gray-600 rounded" title="前一天">
@@ -76,29 +102,36 @@ export default function TodayView({ planItems, projects, tasks, selectedDate, on
             </button>
           </div>
         </div>
-        <p className="text-[12px] text-gray-400 mt-1">{isToday ? "今天" : dateLabel}要执行的事，按上午 / 下午 / 晚上分时段安排，可拖拽调整</p>
+        {/* 顶部时段概览：上午X · 下午Y · 晚上Z（仅统计未完成） */}
+        <div className="mt-1.5 flex items-center gap-3 text-[12px] text-gray-500">
+          {SLOTS.map(s => (
+            <span key={s.id} className="inline-flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accent }} />
+              {s.name} <span className="tabular-nums text-gray-700 font-medium">{bySlot[s.id].pending.length}</span>
+              <span className="text-gray-300">项</span>
+            </span>
+          ))}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {total === 0 && (
-          <div className="text-center py-4 text-[12px] text-gray-300">
+          <div className="text-center py-6 text-[12px] text-gray-300">
             今天还没有计划，在下方各时段新增，或在项目视图把待办加入计划
           </div>
         )}
         {SLOTS.map(slot => {
-          const slotItems = planItems
-            .filter(i => (i.timeSlot || "morning") === slot.id)
-            .sort((a, b) => {
-              const c = (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0);
-              return c !== 0 ? c : (a.order ?? 0) - (b.order ?? 0);
-            });
+          const pending = bySlot[slot.id].pending;
+          const done = bySlot[slot.id].done;
+          const expanded = expandedDone[slot.id];
           return (
-            <div key={slot.id} className="bg-gray-50/60 rounded-xl border border-gray-100">
-              <div className="px-4 py-2.5 flex items-center justify-between">
+            <div key={slot.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+              {/* 时段头 */}
+              <div className="px-3.5 py-2 flex items-center justify-between bg-gray-50/70 border-b border-gray-100">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: slot.accent }} />
                   <span className="text-[13px] font-semibold text-gray-700">{slot.icon} {slot.name}</span>
-                  <span className="text-[11px] text-gray-300 tabular-nums">{slotItems.length}</span>
+                  <span className="text-[11px] text-gray-400 tabular-nums">{pending.length}</span>
                 </div>
                 <button
                   onClick={() => { setAddingSlot(addingSlot === slot.id ? null : slot.id); setTitle(""); }}
@@ -108,7 +141,7 @@ export default function TodayView({ planItems, projects, tasks, selectedDate, on
               </div>
 
               {addingSlot === slot.id && (
-                <div className="px-4 pb-2 space-y-2">
+                <div className="px-3.5 py-2 space-y-2 bg-blue-50/30 border-b border-blue-100">
                   <input
                     autoFocus
                     value={title}
@@ -134,14 +167,15 @@ export default function TodayView({ planItems, projects, tasks, selectedDate, on
                 </div>
               )}
 
+              {/* 未完成列表：拖拽区（仅 pending 参与拖拽排序） */}
               <Droppable droppableId={`plan-${slot.id}`}>
                 {(provided, snapshot) => (
-               <div ref={provided.innerRef} {...provided.droppableProps}
-                    className={`px-2 pb-2 space-y-1.5 min-h-[3.5rem] rounded-lg transition-colors ${snapshot.isDraggingOver ? "drop-zone-highlight" : ""}`}>
-                    {slotItems.length === 0 && !snapshot.isDraggingOver && (
+                  <div ref={provided.innerRef} {...provided.droppableProps}
+                    className={`min-h-[2.5rem] transition-colors ${snapshot.isDraggingOver ? "bg-blue-50/40" : ""}`}>
+                    {pending.length === 0 && !snapshot.isDraggingOver && done.length === 0 && (
                       <div className="text-center py-4 text-[11px] text-gray-300">拖待办到这里</div>
                     )}
-                    {slotItems.map((item, i) => (
+                    {pending.map((item, i) => (
                       <Draggable key={item.id} draggableId={`today-item-${item.id}`} index={i}>
                         {(prov, snap) => (
                           <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps}
@@ -156,6 +190,31 @@ export default function TodayView({ planItems, projects, tasks, selectedDate, on
                   </div>
                 )}
               </Droppable>
+
+              {/* 已完成折叠区（沉底） */}
+              {done.length > 0 && (
+                <div className="border-t border-gray-100 bg-gray-50/40">
+                  <button
+                    onClick={() => setExpandedDone(s => ({ ...s, [slot.id]: !s[slot.id] }))}
+                    className="w-full px-3.5 py-1.5 flex items-center justify-between text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <svg className={`w-3 h-3 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      已完成 <span className="tabular-nums">{done.length}</span> 项
+                    </span>
+                  </button>
+                  {expanded && (
+                    <div>
+                      {done.map(item => (
+                        <PlanTaskCard key={item.id} item={item}
+                          onUpdateStatus={onUpdateStatus} onRemove={onRemove} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
