@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { DragDropContext, DropResult } from "@hello-pangea/dnd";
 import { Todo, Project, ProjectGroup, Task, DailyPlanItem } from "@/lib/types";
 import AuthForm from "@/components/AuthForm";
-import DailyPlanSection from "@/components/DailyPlanSection";
+import WeekPlanSection from "@/components/WeekPlanSection";
 import ProjectSidebar, { SidebarView } from "@/components/ProjectSidebar";
 import ProjectWorkspace from "@/components/ProjectWorkspace";
 import TodayView from "@/components/TodayView";
@@ -41,6 +41,15 @@ export default function Home() {
   const initialLoadedRef = useRef(false);
   const [planItems, setPlanItems] = useState<DailyPlanItem[]>([]);
   const [planDate, setPlanDate] = useState(() => new Date().toISOString().split("T")[0]);
+  // R1: 本周视图相关 state。weekStart 指向本周一（ISO YYYY-MM-DD）
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date();
+    const day = d.getDay(); // 0 sun
+    const diff = (day + 6) % 7;
+    d.setDate(d.getDate() - diff);
+    return d.toISOString().split("T")[0];
+  });
+  const [weekItems, setWeekItems] = useState<(DailyPlanItem & { date: string })[]>([]);
   const [selectedView, setSelectedView] = useState<SidebarView>("today");
   // 全局「已安排」todoId 集合（跨日期、跨状态），来源 /api/scheduled-todo-ids
   // 用于 AllTodosView「未安排 Tab」判定，避免只看当日 planItems 造成的错误判定
@@ -295,6 +304,32 @@ export default function Home() {
 
   useEffect(() => { if (user) fetchPlan(); }, [fetchPlan, user]);
 
+  // R1: 本周 planItems 拉取（含 date='NEXT_WEEK' 的下周暂存项）
+  const fetchWeek = useCallback(async () => {
+    if (!user) return;
+    try {
+      const r = await fetch(`/api/daily-plan/week?start=${weekStart}`);
+      if (!r.ok) return;
+      const data = await r.json();
+      if (Array.isArray(data.items)) setWeekItems(data.items);
+    } catch (e) { console.error(e); }
+  }, [user, weekStart]);
+
+  useEffect(() => { if (user) fetchWeek(); }, [fetchWeek, user]);
+
+  const navigateWeek = (offset: number) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + offset * 7);
+    setWeekStart(d.toISOString().split("T")[0]);
+  };
+  const setThisWeek = () => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = (day + 6) % 7;
+    d.setDate(d.getDate() - diff);
+    setWeekStart(d.toISOString().split("T")[0]);
+  };
+
   // 拉取「所有被安排过的 todoId 集合」（跨日期、跨状态），供未安排 Tab 判定使用
   const fetchScheduledIds = useCallback(async () => {
     if (!user) return;
@@ -331,6 +366,7 @@ export default function Home() {
       if (!r.ok) throw new Error(await r.text());
       setScheduledIds(prev => { const n = new Set(prev); n.add(todoId); return n; });
       fetchPlan();
+      fetchWeek();
     } catch (e) {
       console.error(e);
       setPlanItems(prev => prev.filter(i => i.id !== tempId)); // 回滚
@@ -356,6 +392,7 @@ export default function Home() {
       setScheduledIds(prev => { const n = new Set(prev); n.add(todoId); return n; });
       // 刷新当日 planItems（若安排的是当日）
       fetchPlan();
+      fetchWeek();
       // 已由 scheduledIds 承担「跨日期已安排」判定，不再往 planItems 塞跨日期的乐观项
     } catch (e) { console.error(e); alert("网络错误，请检查连接"); }
   };
@@ -375,16 +412,19 @@ export default function Home() {
       await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId: n.id, date: planDate, timeSlot }) });
       setScheduledIds(prev => { const nx = new Set(prev); nx.add(n.id); return nx; });
       fetchPlan();
+      fetchWeek();
     } catch (e) { console.error(e); alert("网络错误，请检查连接"); }
   };
 
   const handleRemovePlan = async (itemId: string) => {
     setPlanItems(prev => prev.filter(i => i.id !== itemId));
+    setWeekItems(prev => prev.filter(i => i.id !== itemId));
     try {
       await fetch(`/api/daily-plan/${itemId}`, { method: "DELETE" });
       // 该 todoId 可能已完全脱离所有计划，刷新全局已安排集合
       fetchScheduledIds();
-    } catch (e) { console.error(e); fetchPlan(); }
+      fetchWeek();
+    } catch (e) { console.error(e); fetchPlan(); fetchWeek(); }
   };
 
   const handleUpdatePlanStatus = async (itemId: string, status: string) => {
@@ -392,6 +432,7 @@ export default function Home() {
     const completed = status === "completed";
     // 乐观更新：计划项状态 + 对应待办完成状态
     setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, status: status as DailyPlanItem["status"] } : i));
+    setWeekItems(prev => prev.map(i => i.id === itemId ? { ...i, status: status as DailyPlanItem["status"] } : i));
     if (item?.todoId) {
       setTodos(prev => prev.map(t => t.id === item.todoId ? { ...t, completed, completedAt: completed ? new Date().toISOString() : null } : t));
     }
@@ -419,6 +460,24 @@ export default function Home() {
     } catch (e) { console.error(e); fetchPlan(); }
   };
 
+  // 为当日计划项设置具体开始时间（半小时粒度：HH:mm）与持续时长（分钟）
+  const handleSetPlanTime = async (itemId: string, startAt: string | null, durationMin?: number) => {
+    setPlanItems(prev => prev.map(i => i.id === itemId ? {
+      ...i,
+      startAt,
+      ...(typeof durationMin === "number" ? { durationMin } : {}),
+    } : i));
+    try {
+      const payload: Record<string, unknown> = { id: itemId, startAt };
+      if (typeof durationMin === "number") payload.durationMin = durationMin;
+      await fetch("/api/daily-plan", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: [payload] }),
+      });
+    } catch (e) { console.error(e); fetchPlan(); }
+  };
+
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const srcId = result.source.droppableId, dstId = result.destination.droppableId;
@@ -439,22 +498,45 @@ export default function Home() {
       return;
     }
 
-    // ── 当日计划相关拖拽 ──
+    // ── 计划相关拖拽（当日/本周/下周） ──
     if (dstId.startsWith("plan-") || srcId.startsWith("plan-")) {
-      // 拖出计划区（丢到待办 zone）：忽略，不做移出（移出用删除按钮）
+      // 拖出计划区（丢到待办 zone）：忽略
       if (!dstId.startsWith("plan-")) return;
-      const slot = dstId.replace("plan-", "") as "morning" | "afternoon" | "evening";
+
+      // 解析 destination：可能是
+      //   plan-nextweek                     → 下周暂存
+      //   plan-{YYYY-MM-DD}-{slot}          → 本周格子
+      //   plan-{slot}                       → 兼容旧「当日计划」
+      type Slot = "morning" | "afternoon" | "evening";
+      let destDate: string | null = null;   // null 表示"当日"（旧行为）
+      let destSlot: Slot = "morning";
+      if (dstId === "plan-nextweek") {
+        destDate = "NEXT_WEEK";
+        destSlot = "morning";
+      } else {
+        const rest = dstId.replace(/^plan-/, "");
+        const m = rest.match(/^(\d{4}-\d{2}-\d{2})-(morning|afternoon|evening)$/);
+        if (m) {
+          destDate = m[1];
+          destSlot = m[2] as Slot;
+        } else if (rest === "morning" || rest === "afternoon" || rest === "evening") {
+          destSlot = rest as Slot;
+        } else {
+          return;
+        }
+      }
 
       if (srcId.startsWith("plan-") || srcId.startsWith("today-")) {
-        // 计划内/今日视图移动：draggableId = plan-item-{id} 或 today-item-{id}
+        // 已有 planItem 的移动
         const itemId = result.draggableId.replace(/^(plan-item-|today-item-)/, "");
-        const cur = planItems.find(i => i.id === itemId);
+        // 优先在 planItems 找，找不到再找 weekItems
+        const cur = planItems.find(i => i.id === itemId) || weekItems.find(i => i.id === itemId);
         if (!cur) return;
 
-        // 同一时段内拖拽：调整顺序，持久化 order
-        if (srcId === dstId) {
+        // 同一 Droppable 内拖拽：调整顺序（仅对旧的 plan-{slot} 保留 order 持久化）
+        if (srcId === dstId && destDate === null) {
           const slotItems = planItems
-            .filter(i => (i.timeSlot || "morning") === slot)
+            .filter(i => (i.timeSlot || "morning") === destSlot)
             .sort((a, b) => {
               const c = (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0);
               return c !== 0 ? c : (a.order ?? 0) - (b.order ?? 0);
@@ -470,17 +552,36 @@ export default function Home() {
           return;
         }
 
-        // 跨时段移动
-        if (cur.timeSlot === slot) return;
-        setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, timeSlot: slot } : i));
+        // 跨 Droppable / 跨日期 移动：删旧建新（简化实现，避免 schema 迁移）
+        if (destDate !== null && cur.todoId) {
+          // 目标为具体日期或 NEXT_WEEK：删除旧项，POST 到新日期+时段
+          setWeekItems(prev => prev.filter(i => i.id !== itemId));
+          setPlanItems(prev => prev.filter(i => i.id !== itemId));
+          try {
+            await fetch(`/api/daily-plan/${itemId}`, { method: "DELETE" });
+            await fetch("/api/daily-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ todoId: cur.todoId, date: destDate, timeSlot: destSlot }) });
+            fetchPlan();
+            fetchWeek();
+          } catch (e) { console.error(e); fetchPlan(); fetchWeek(); }
+          return;
+        }
+
+        // 跨时段（仍在当日）
+        if (cur.timeSlot === destSlot) return;
+        setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, timeSlot: destSlot } : i));
         try {
-          await fetch("/api/daily-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: itemId, timeSlot: slot }] }) });
+          await fetch("/api/daily-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: itemId, timeSlot: destSlot }] }) });
         } catch (e) { console.error(e); fetchPlan(); }
       } else {
         // 从待办区拖入计划：draggableId = todo.id
         const todoId = result.draggableId;
-        if (planItems.some(i => i.todoId === todoId)) return; // 已在计划中，避免 400
-        handleAddToPlanSlot(todoId, slot);
+        if (destDate !== null) {
+          // 拖到本周/下周格子：调用 quickSchedule，不做「已在计划中」的短路（允许把待办安排到多天）
+          handleQuickSchedule(todoId, destDate, destSlot);
+        } else {
+          if (planItems.some(i => i.todoId === todoId)) return;
+          handleAddToPlanSlot(todoId, destSlot);
+        }
       }
       return;
     }
@@ -598,7 +699,7 @@ export default function Home() {
 
       {/* ── 三栏工作区 ── */}
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className={`flex-1 grid ${isProjectView ? "grid-cols-[244px_1fr_388px]" : "grid-cols-[244px_1fr]"} gap-4 p-4 min-h-0`}>
+        <div className={`flex-1 grid ${(isProjectView || selectedView === "all") ? "grid-cols-[244px_1fr_388px]" : "grid-cols-[244px_1fr]"} gap-4 p-4 min-h-0`}>
           {/* 左栏：项目导航 */}
           <ProjectSidebar
             todos={todos}
@@ -659,19 +760,18 @@ export default function Home() {
             )}
           </div>
 
-          {/* 右栏：当日计划（仅项目视图显示，作为快速收纳区） */}
-          {isProjectView && (
+          {/* 右栏：本周计划（项目视图 / 全部待办视图显示） */}
+          {(isProjectView || selectedView === "all") && (
             <div className="min-w-0 h-full overflow-y-auto">
-              <DailyPlanSection
+              <WeekPlanSection
                 todos={todos}
-                projects={projects}
-                planItems={planItems}
-                selectedDate={planDate}
-                onNavigateDate={navigatePlanDate}
-                onSetToday={setPlanToday}
+                weekItems={weekItems}
+                weekStart={weekStart}
+                onNavigateWeek={navigateWeek}
+                onSetThisWeek={setThisWeek}
                 onUpdateStatus={handleUpdatePlanStatus}
                 onRemove={handleRemovePlan}
-                onAddToPlan={handleAddToPlanSlot}
+                onAddToPlan={handleQuickSchedule}
               />
             </div>
           )}

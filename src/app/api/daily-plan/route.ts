@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { queryAll, queryOne, execute, cuid } from "@/lib/db";
 import { withAuth, dec, apiOk } from "@/lib/helpers";
 
+// 校验 "HH:mm" 且分钟为 0/15/30/45 的整数倍
+function normalizeStartAt(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(v);
+  if (!m) return null;
+  return v;
+}
+
+function normalizeDuration(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0 && v <= 24 * 60) {
+    return Math.round(v);
+  }
+  return 30;
+}
+
 export const GET = withAuth(async (request: NextRequest, userId: string) => {
   const date = request.nextUrl.searchParams.get("date") || new Date().toISOString().split("T")[0];
 
@@ -33,6 +48,8 @@ export const GET = withAuth(async (request: NextRequest, userId: string) => {
     order: item.order,
     status: item.status,
     timeSlot: item.timeSlot || "morning",
+    startAt: (item.startAt as string | null) ?? null,
+    durationMin: (item.durationMin as number | null) ?? 30,
     userId: item.userId,
     createdAt: item.createdAt,
     todo: item.t_title ? {
@@ -51,13 +68,21 @@ export const GET = withAuth(async (request: NextRequest, userId: string) => {
 });
 
 export const POST = withAuth(async (request: NextRequest, userId: string) => {
-  const { todoId, date, timeSlot } = await request.json();
+  const body = await request.json();
+  const { todoId, date, timeSlot, startAt: rawStartAt, durationMin: rawDur } = body;
   if (!todoId) {
     return NextResponse.json({ error: "todoId 不能为空" }, { status: 400 });
   }
   const slot = ["morning", "afternoon", "evening"].includes(timeSlot) ? timeSlot : "morning";
+  const startAt = normalizeStartAt(rawStartAt);
+  const durationMin = normalizeDuration(rawDur);
 
-  const planDate = date || new Date().toISOString().split("T")[0];
+  // 支持特殊值 "NEXT_WEEK"（下周暂存区，无具体日期）
+  const isNextWeek = date === "NEXT_WEEK";
+  const planDate = isNextWeek ? "NEXT_WEEK" : (date || new Date().toISOString().split("T")[0]);
+  if (!isNextWeek && !/^\d{4}-\d{2}-\d{2}$/.test(planDate)) {
+    return NextResponse.json({ error: "date 格式错误" }, { status: 400 });
+  }
 
   let plan = await queryOne("SELECT * FROM DailyPlan WHERE date = ? AND userId = ?", [planDate, userId]);
   if (!plan) {
@@ -81,22 +106,34 @@ export const POST = withAuth(async (request: NextRequest, userId: string) => {
   const id = cuid();
   const now = new Date().toISOString();
   await execute(
-    'INSERT INTO DailyPlanItem (id, planId, todoId, "order", status, timeSlot, userId, createdAt) VALUES (?,?,?,?,?,?,?,?)',
-    [id, plan!.id, todoId, maxOrd + 1, "pending", slot, userId, now]
+    'INSERT INTO DailyPlanItem (id, planId, todoId, "order", status, timeSlot, startAt, durationMin, userId, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    [id, plan!.id, todoId, maxOrd + 1, "pending", slot, startAt, durationMin, userId, now]
   );
 
-  return NextResponse.json({id, planId: plan!.id, todoId, order: maxOrd + 1, status: "pending", timeSlot: slot }, { status: 201 });
+  return NextResponse.json({
+    id, planId: plan!.id, todoId, order: maxOrd + 1, status: "pending",
+    timeSlot: slot, startAt, durationMin
+  }, { status: 201 });
 });
 
 export const PUT = withAuth(async (request: NextRequest, userId: string) => {
-  const { items } = await request.json() as { items: { id: string; order?: number; status?: string; timeSlot?: string }[] };
+  const { items } = await request.json() as {
+    items: { id: string; order?: number; status?: string; timeSlot?: string; startAt?: string | null; durationMin?: number }[]
+  };
   for (const item of items) {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (item.order !== undefined) { sets.push('"order" = ?'); vals.push(item.order); }
     if (item.status !== undefined) { sets.push("status = ?"); vals.push(item.status); }
     if (item.timeSlot !== undefined) { sets.push("timeSlot = ?"); vals.push(item.timeSlot); }
-   if (sets.length === 0) continue;
+    if (item.startAt !== undefined) {
+      const v = item.startAt === null ? null : normalizeStartAt(item.startAt);
+      sets.push("startAt = ?"); vals.push(v);
+    }
+    if (item.durationMin !== undefined) {
+      sets.push("durationMin = ?"); vals.push(normalizeDuration(item.durationMin));
+    }
+    if (sets.length === 0) continue;
     vals.push(item.id); vals.push(userId);
     await execute(`UPDATE DailyPlanItem SET ${sets.join(", ")} WHERE id = ? AND userId = ?`, vals);
   }

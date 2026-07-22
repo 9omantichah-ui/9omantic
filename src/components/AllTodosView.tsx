@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Todo, Project, DailyPlanItem } from "@/lib/types";
+import TodoRow from "./TodoRow";
 
 interface AllTodosViewProps {
   todos: Todo[];
@@ -44,7 +45,6 @@ export default function AllTodosView({
   const [scheduleFor, setScheduleFor] = useState<string | null>(null);
   const [customDate, setCustomDate] = useState<string>("");
   const [customSlot, setCustomSlot] = useState<Slot>("morning");
-  const [editingTitle, setEditingTitle] = useState<{ id: string; value: string } | null>(null);
 
   const toggleCollapse = (key: string) =>
     setCollapsed(prev => {
@@ -180,93 +180,27 @@ export default function AllTodosView({
     </>
   );
 
-  // 统一行样式：全部 Tab 与 未安排 Tab 共用
-  const renderTodoRow = (todo: Todo, opts: { showSchedule: boolean; showProject: boolean }) => {
+  // 统一行样式：全部 Tab 与 未安排 Tab 共用 TodoRow 组件
+  const renderTodoRow = (todo: Todo) => {
     const open = scheduleFor === todo.id;
-    const isEditing = editingTitle?.id === todo.id;
     return (
-      <div
-        key={todo.id}
-        className="group flex items-start gap-3 px-2 py-2 border-b border-gray-50 hover:bg-gray-50/60 transition-colors"
-      >
-        <button
-          onClick={() => onToggle(todo.id, !todo.completed)}
-          className={`mt-1 w-4 h-4 rounded-full border flex-shrink-0 flex items-center justify-center transition-colors ${
-            todo.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-emerald-400"
-          }`}
-          title={todo.completed ? "标为未完成" : "标为已完成"}
-        >
-          {todo.completed && (
-            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-        </button>
-        <div className="flex-1 min-w-0">
-          {isEditing ? (
-            <input
-              autoFocus
-              value={editingTitle!.value}
-              onChange={e => setEditingTitle({ id: todo.id, value: e.target.value })}
-              onBlur={() => {
-                const v = editingTitle!.value.trim();
-                if (v && v !== todo.title) onUpdate(todo.id, { title: v });
-                setEditingTitle(null);
-              }}
-              onKeyDown={e => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                if (e.key === "Escape") setEditingTitle(null);
-              }}
-              className="w-full text-[14px] text-gray-800 leading-snug border-b border-blue-300 focus:outline-none bg-transparent"
-            />
-          ) : (
-            <div
-              onDoubleClick={() => setEditingTitle({ id: todo.id, value: todo.title })}
-              className={`text-[14px] leading-snug truncate cursor-text ${
-                todo.completed ? "text-gray-400 line-through" : "text-gray-800"
-              }`}
-            >
-              {todo.title}
-            </div>
-          )}
-          {opts.showProject && (
-            <div className="flex items-center gap-1.5 mt-0.5 text-[11px]">
-              {todo.project ? (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: todo.project.color }} />
-                  {todo.project.name}
-                </span>
-              ) : (
-                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">收件箱</span>
-              )}
-              {todo.task && <span className="text-gray-400">{todo.task.name}</span>}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {opts.showSchedule && !todo.completed && (
-            <div className="relative">
-              <button
-                onClick={() => setScheduleFor(open ? null : todo.id)}
-                className="opacity-60 group-hover:opacity-100 px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[12px] font-medium hover:bg-blue-100 transition-all"
-              >
-                安排 ▾
-              </button>
-              {open && renderScheduleMenu(todo.id)}
-            </div>
-          )}
-          <button
-            onClick={() => {
-              if (confirm(`确定删除待办「${todo.title}」？`)) onDelete(todo.id);
-            }}
-            className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
-            title="删除"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" />
-            </svg>
-          </button>
-        </div>
+      <div key={todo.id} className="relative">
+        <TodoRow
+          todo={todo}
+          config={{
+            showProjectChip: false,
+            showPriority: true,
+            editableTitle: true,
+            actions: todo.completed ? ["delete"] : ["schedule", "delete"],
+          }}
+          handlers={{
+            onToggleComplete: (id, completed) => onToggle(id, completed),
+            onUpdate: (id, patch) => onUpdate(id, patch as Record<string, unknown>),
+            onDelete: id => onDelete(id),
+            onSchedule: id => setScheduleFor(open ? null : id),
+          }}
+          extraRight={open ? renderScheduleMenu(todo.id) : null}
+        />
       </div>
     );
   };
@@ -306,7 +240,7 @@ export default function AllTodosView({
         </div>
         {!isCollapsed && (
           <div>
-            {visible.map(todo => renderTodoRow(todo, { showSchedule: true, showProject: false }))}
+            {visible.map(todo => renderTodoRow(todo))}
           </div>
         )}
       </div>
@@ -377,7 +311,7 @@ export default function AllTodosView({
                         <span className="text-[13px] font-semibold text-gray-700 truncate">{p.name}</span>
                         <span className="text-[11px] text-gray-400 tabular-nums">{list.length}</span>
                       </div>
-                      {list.map(todo => renderTodoRow(todo, { showSchedule: true, showProject: false }))}
+                      {list.map(todo => renderTodoRow(todo))}
                     </div>
                   );
                 })}
@@ -388,7 +322,7 @@ export default function AllTodosView({
                       <span className="text-[13px] font-semibold text-gray-700">收件箱</span>
                       <span className="text-[11px] text-gray-400 tabular-nums">{(unscheduledGroups.get("__inbox__") ?? []).length}</span>
                     </div>
-                    {(unscheduledGroups.get("__inbox__") ?? []).map(todo => renderTodoRow(todo, { showSchedule: true, showProject: false }))}
+                    {(unscheduledGroups.get("__inbox__") ?? []).map(todo => renderTodoRow(todo))}
                   </div>
                 )}
               </>

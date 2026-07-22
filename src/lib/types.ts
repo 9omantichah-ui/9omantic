@@ -62,6 +62,8 @@ export interface DailyPlanItem {
   order: number;
   status: "pending" | "in_progress" | "completed";
   timeSlot: "morning" | "afternoon" | "evening";
+  startAt: string | null;     // "HH:mm"，null = 未定时
+  durationMin: number;         // 持续分钟数，默认 30
   userId: string;
   createdAt: string;
   todo?: Todo;
